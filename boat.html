@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0b1526">
+<title>🚢 Vessel GPS Sender — Seismic Vessel</title>
+<style>
+  :root{
+    --bg:#0b1526; --card:#132036; --line:#22344f;
+    --ink:#eaf1fb; --ink2:#9fb2cc; --ink3:#6b7f9c;
+    --accent:#3d9bff; --good:#2ecc71; --warn:#f1c40f; --bad:#e74c3c;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{margin:0; font-family:'Segoe UI',system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--ink); min-height:100vh; padding:16px;}
+  .wrap{max-width:480px; margin:0 auto;}
+  h1{font-size:1.15rem; margin:4px 0 2px; display:flex; align-items:center; gap:8px;}
+  .sub{color:var(--ink2); font-size:.85rem; margin-bottom:14px;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin-bottom:12px;}
+  .statusRow{display:flex; align-items:center; gap:10px;}
+  .dot{width:12px; height:12px; border-radius:50%; background:var(--ink3); flex:none;}
+  .dot.on{background:var(--good); box-shadow:0 0 10px rgba(46,204,113,.7); animation:pulse 1.6s infinite;}
+  .dot.err{background:var(--bad);}
+  @keyframes pulse{50%{opacity:.5}}
+  #statusText{font-size:.95rem;}
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .tile{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px 14px;}
+  .tile .lbl{font-size:.72rem; color:var(--ink3); text-transform:uppercase; letter-spacing:.06em;}
+  .tile .val{font-size:1.35rem; font-weight:600; margin-top:2px; font-variant-numeric:tabular-nums;}
+  .tile .unit{font-size:.8rem; color:var(--ink2); font-weight:400;}
+  button{width:100%; padding:16px; font-size:1.1rem; font-weight:700; border:none; border-radius:14px; cursor:pointer; margin-top:4px;}
+  #btnStart{background:var(--good); color:#06281a;}
+  #btnStop{background:var(--bad); color:#fff; display:none;}
+  .meta{font-size:.8rem; color:var(--ink3); margin-top:10px; line-height:1.5;}
+  .warnBox{background:#3a2b12; border:1px solid #6b5420; color:#f5d98b; font-size:.82rem; border-radius:12px; padding:10px 12px; margin-bottom:12px; line-height:1.5;}
+  .cfgErr{background:#3a1616; border:1px solid #6b2020; color:#ffb3b3; font-size:.85rem; border-radius:12px; padding:12px; margin-bottom:12px; line-height:1.6; display:none;}
+  code{background:#1c2c47; padding:1px 5px; border-radius:5px; font-size:.8em;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🚢 Vessel GPS Sender</h1>
+  <div class="sub">Keep this page open on the phone aboard the vessel — position is sent automatically</div>
+
+  <div class="cfgErr" id="cfgErr">
+    ⚠️ Firebase config missing — open this file in a text editor and edit
+    <code>firebaseConfig</code> as described in SETUP_GUIDE.md before use
+  </div>
+
+  <div class="card">
+    <div class="statusRow">
+      <div class="dot" id="dot"></div>
+      <div id="statusText">Not tracking yet</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="tile"><div class="lbl">Latitude</div><div class="val" id="vLat">–</div></div>
+    <div class="tile"><div class="lbl">Longitude</div><div class="val" id="vLon">–</div></div>
+    <div class="tile"><div class="lbl">Speed</div><div class="val" id="vSpd">– <span class="unit">knots</span></div></div>
+    <div class="tile"><div class="lbl">Heading</div><div class="val" id="vHdg">– <span class="unit">°</span></div></div>
+    <div class="tile"><div class="lbl">GPS accuracy</div><div class="val" id="vAcc">– <span class="unit">m</span></div></div>
+    <div class="tile"><div class="lbl">Sent</div><div class="val" id="vCnt">0 <span class="unit">times</span></div></div>
+  </div>
+
+  <div style="height:10px"></div>
+  <button id="btnStart">▶ Start sending</button>
+  <button id="btnStop">■ Stop</button>
+
+  <div class="warnBox" style="margin-top:12px">
+    📱 <b>Important:</b> Keep this page open with the screen on — the page will try to
+    keep the screen awake automatically. Keep the phone plugged in and disable battery saver.
+  </div>
+
+  <div class="meta">
+    Sends every <span id="vInterval">15</span> s · Vessel ID: <code id="vId"></code><br>
+    Last sent: <span id="vLast">–</span>
+  </div>
+</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+<script>
+/* ============================================================
+   ⚙️ ตั้งค่าตรงนี้ — วาง firebaseConfig ของคุณจาก Firebase Console
+   (ดูวิธีได้ใน SETUP_GUIDE.md)
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyDMiqCu7WyvoVljzy71EkiJO-fFcdKehmA",
+  authDomain: "vesseltrack-da8a5.firebaseapp.com",
+  databaseURL: "https://vesseltrack-da8a5-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "vesseltrack-da8a5",
+  storageBucket: "vesseltrack-da8a5.firebasestorage.app",
+  messagingSenderId: "994797595177",
+  appId: "1:994797595177:web:1d948a195b37ae40ec0a38"
+};
+
+const VESSEL_ID   = "seismic-1";   // ชื่อเรือ (ต้องตรงกับใน dashboard.html)
+const SEND_EVERY  = 15;            // ส่งทุกกี่วินาที
+const MAX_ACC_M   = 500;           // ไม่ส่งถ้าความแม่นยำแย่กว่านี้ (เมตร) — กัน IP location จาก notebook
+/* ============================================================ */
+
+const $ = id => document.getElementById(id);
+$('vId').textContent = VESSEL_ID;
+$('vInterval').textContent = SEND_EVERY;
+
+const configured = !firebaseConfig.apiKey.startsWith("PASTE_");
+if (!configured) $('cfgErr').style.display = 'block';
+
+let db = null;
+if (configured) {
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.database();
+}
+
+let watchId = null, lastSent = 0, count = 0, wakeLock = null, lastPos = null;
+
+const MS2KN = 1.943844;
+const fmt = (n, d) => (n == null || isNaN(n)) ? '–' : n.toFixed(d);
+
+function setStatus(text, cls) {
+  $('statusText').textContent = text;
+  $('dot').className = 'dot' + (cls ? ' ' + cls : '');
+}
+
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    }
+  } catch (e) { /* บางเครื่องไม่รองรับ — ให้ผู้ใช้ตั้งหน้าจอไม่ดับเอง */ }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && watchId !== null) requestWakeLock();
+});
+
+function onPosition(pos) {
+  const c = pos.coords;
+  lastPos = pos;
+  $('vLat').textContent = fmt(c.latitude, 5);
+  $('vLon').textContent = fmt(c.longitude, 5);
+  $('vSpd').innerHTML = fmt(c.speed != null ? c.speed * MS2KN : null, 1) + ' <span class="unit">knots</span>';
+  $('vHdg').innerHTML = fmt(c.heading, 0) + ' <span class="unit">°</span>';
+  $('vAcc').innerHTML = fmt(c.accuracy, 0) + ' <span class="unit">m</span>';
+
+  if (c.accuracy != null && c.accuracy > MAX_ACC_M) {
+    setStatus('No real GPS fix (accuracy ' + Math.round(c.accuracy) + ' m > ' + MAX_ACC_M + ' m) — not sending. Use a phone with GPS.', 'err');
+    return;
+  }
+  const now = Date.now();
+  if (now - lastSent < SEND_EVERY * 1000) return;
+  lastSent = now;
+  send(c, now);
+}
+
+function send(c, now) {
+  if (!db) { setStatus('Firebase not configured', 'err'); return; }
+  const point = {
+    t: now,
+    lat: +c.latitude.toFixed(6),
+    lon: +c.longitude.toFixed(6),
+    sp:  c.speed   != null ? +(c.speed * MS2KN).toFixed(2) : null,
+    hd:  c.heading != null ? +c.heading.toFixed(1) : null,
+    acc: c.accuracy != null ? +c.accuracy.toFixed(0) : null
+  };
+  const base = db.ref('vessels/' + VESSEL_ID);
+  Promise.all([
+    base.child('current').set(point),
+    base.child('track').push(point)
+  ]).then(() => {
+    count++;
+    $('vCnt').innerHTML = count + ' <span class="unit">times</span>';
+    $('vLast').textContent = new Date(now).toLocaleTimeString('en-GB');
+    setStatus('Sending position… (every ' + SEND_EVERY + 's)', 'on');
+  }).catch(err => {
+    setStatus('Send failed: ' + err.message, 'err');
+  });
+}
+
+function onError(err) {
+  const msgs = {1: 'Location permission denied — please tap Allow', 2: 'Cannot get GPS fix', 3: 'GPS timeout — retrying…'};
+  setStatus(msgs[err.code] || err.message, 'err');
+}
+
+$('btnStart').onclick = () => {
+  if (!navigator.geolocation) { setStatus('This browser does not support GPS', 'err'); return; }
+  setStatus('Acquiring GPS signal…');
+  watchId = navigator.geolocation.watchPosition(onPosition, onError, {
+    enableHighAccuracy: true, maximumAge: 5000, timeout: 20000
+  });
+  requestWakeLock();
+  $('btnStart').style.display = 'none';
+  $('btnStop').style.display = 'block';
+};
+
+$('btnStop').onclick = () => {
+  if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+  if (wakeLock) { wakeLock.release(); wakeLock = null; }
+  setStatus('Stopped');
+  $('btnStart').style.display = 'block';
+  $('btnStop').style.display = 'none';
+};
+</script>
+</body>
+</html>
