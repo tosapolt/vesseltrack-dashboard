@@ -59,6 +59,7 @@
   .dd-row .cnt{color:var(--ink3); font-size:.72rem;}
   .dd-row .del{background:none; border:none; color:var(--bad); cursor:pointer; padding:2px 6px; font-size:.9rem;}
   .dd-empty{color:var(--ink3); font-size:.8rem; padding:10px;}
+  #preRow{border-bottom:1px solid var(--line); margin-bottom:5px; padding-bottom:9px;}
   /* ---- Operation banner (right side, sliding photos + title) ---- */
   #opBanner{position:fixed; right:0; width:50vw; z-index:1200; overflow:hidden;
     background:#04101f; border-left:1px solid var(--line); box-shadow:-8px 0 26px rgba(0,0,0,.55);}
@@ -130,13 +131,15 @@
   <button id="btnStr" class="active">🎣 Streamers</button>
   <button id="btnFit">🧭 Fit track</button>
   <button id="btnMeasure">📏 Measure</button>
-  <button id="btnSea" class="active">🌊 Seamarks</button>
-  <button id="btnPre" class="active">📐 Pre-plot</button>
   <button id="btnBanner" class="active">🖼 Banner</button>
   <div class="dropdown" id="polyDrop">
     <button id="btnPoly">🗂 Polygons ▾</button>
     <div class="dropdown-menu" id="polyMenu">
       <button id="btnPolyUpload" class="dd-upload">⬆ Upload KML / KMZ / GeoJSON</button>
+      <div class="dd-row" id="preRow">
+        <input type="checkbox" id="prePlotChk" checked>
+        <span class="nm">📐 Pre-plot lines</span>
+      </div>
       <div class="dd-list" id="polyList"></div>
     </div>
   </div>
@@ -235,7 +238,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-08-6';
+const BUILD = '2026-08-08-7';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -410,10 +413,9 @@ $('btnStr').onclick = () => {
 };
 
 $('btnFit').onclick = () => { follow = false; const pts = trackLine.getLatLngs(); if (pts.length > 1) map.fitBounds(trackLine.getBounds(), { padding: [40, 40] }); };
-let seaOn = true;
-seaLayer.addTo(map);
-$('btnSea').onclick = () => { seaOn = !seaOn; $('btnSea').classList.toggle('active', seaOn); seaOn ? seaLayer.addTo(map) : map.removeLayer(seaLayer); };
-$('btnPre').onclick = () => { preOn = !preOn; $('btnPre').classList.toggle('active', preOn); preOn ? preLayer.addTo(map) : map.removeLayer(preLayer); refreshPreLabels(); };
+seaLayer.addTo(map);   // seamarks เปิดตลอด (เอาปุ่ม toggle ออกแล้ว)
+// Pre-plot toggle ย้ายมาอยู่ในเมนู Polygons แล้ว
+$('prePlotChk').onchange = (e) => { preOn = e.target.checked; preOn ? preLayer.addTo(map) : map.removeLayer(preLayer); refreshPreLabels(); };
 map.on('dragstart', () => { follow = false; });
 
 // ---------- Measure tool (วัดระยะบนแผนที่) ----------
