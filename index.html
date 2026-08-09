@@ -102,6 +102,11 @@
   .op-cell .chk{position:absolute; top:6px; left:6px; width:22px; height:22px; border-radius:6px; background:rgba(0,0,0,.55); border:1px solid #fff; display:flex; align-items:center; justify-content:center; color:#fff; font-size:.85rem; font-weight:700;}
   .op-cell .cell-del{position:absolute; top:6px; right:6px; background:rgba(231,76,60,.92); color:#fff; border:none; border-radius:6px; padding:3px 8px; cursor:pointer; font-size:.85rem;}
   .op-empty{padding:34px; color:var(--ink3); text-align:center; grid-column:1/-1;}
+  .op-textedit{display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; padding:14px 16px; border-bottom:1px solid var(--line);}
+  .op-te-field{flex:1; min-width:200px; display:flex; flex-direction:column; gap:4px;}
+  .op-te-field label{font-size:.74rem; color:var(--ink3); text-transform:uppercase; letter-spacing:.05em;}
+  .op-textedit input{background:#1c2c47; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:.9rem; font-family:inherit;}
+  #opTextSave{background:var(--accent); color:#042038; border:none; border-radius:8px; padding:9px 16px; font-size:.85rem; font-weight:700; cursor:pointer; white-space:nowrap;}
   /* ป้ายเลข line number ของ pre-plot */
   .preplot-label{background:transparent !important; border:none !important; color:#e0e0e0;
     font-size:11px; font-weight:700; text-align:center; white-space:nowrap;
@@ -167,8 +172,8 @@
   <div class="slides" id="opSlides"></div>
   <div class="veil"></div>
   <div class="cap">
-    <h2>3D seismic data<br>acquisition NGOT 2026</h2>
-    <span class="st">Status: <b>Streamer deployment</b></span>
+    <h2 id="opTopicText">3D seismic data acquisition NGOT 2026</h2>
+    <span class="st">Status: <b id="opStatusText">Streamer deployment</b></span>
   </div>
   <div class="op-tools" id="opTools">
     <button id="opAdd" title="เพิ่มรูป Banner (ใส่ PIN)">⬆ Add photo</button>
@@ -187,6 +192,17 @@
       <button id="opSelDel">🗑 ลบที่เลือก</button>
       <button id="opClearAll">ลบทั้งหมด</button>
       <button id="opManageClose">✕ ปิด</button>
+    </div>
+    <div class="op-textedit">
+      <div class="op-te-field">
+        <label for="opTopic">หัวข้อ (Topic)</label>
+        <input type="text" id="opTopic" maxlength="120" placeholder="เช่น 3D seismic data acquisition NGOT 2026">
+      </div>
+      <div class="op-te-field">
+        <label for="opStatus">สถานะ (Status)</label>
+        <input type="text" id="opStatus" maxlength="80" placeholder="เช่น Streamer deployment">
+      </div>
+      <button id="opTextSave">💾 บันทึกข้อความ</button>
     </div>
     <div class="op-grid" id="opGrid"></div>
   </div>
@@ -238,7 +254,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-08-7';
+const BUILD = '2026-08-08-8';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -972,12 +988,31 @@ ${coords}
   if (!bar || !wrap) return;
 
   // เชื่อม Firebase (ถ้า main script init ไว้แล้ว) — ถ้าไม่ได้ ใช้รูป default อย่างเดียว
-  let bannerRef = null;
+  let bannerRef = null, metaRef = null;
   try {
     if (window.firebase && firebase.apps && firebase.apps.length) {
       bannerRef = firebase.database().ref('vessels/' + VID + '/banner');
+      metaRef   = firebase.database().ref('vessels/' + VID + '/bannerMeta');
     }
-  } catch (e) { bannerRef = null; }
+  } catch (e) { bannerRef = null; metaRef = null; }
+
+  // ---------- หัวข้อ + สถานะ (แก้ผ่าน Manage, sync ทุกเครื่อง) ----------
+  const DEFAULT_TOPIC  = '3D seismic data acquisition NGOT 2026';
+  const DEFAULT_STATUS = 'Streamer deployment';
+  let curTopic = DEFAULT_TOPIC, curStatus = DEFAULT_STATUS;
+  function setBannerText(topic, status) {
+    curTopic  = (topic  && topic.trim())  ? topic.trim()  : DEFAULT_TOPIC;
+    curStatus = (status && status.trim()) ? status.trim() : DEFAULT_STATUS;
+    const h = el('opTopicText'), s = el('opStatusText');
+    if (h) h.textContent = curTopic;
+    if (s) s.textContent = curStatus;
+  }
+  if (metaRef) {
+    metaRef.on('value', snap => {
+      const m = snap.val() || {};
+      setBannerText(m.topic, m.status);
+    }, err => console.error('bannerMeta error:', err && err.message));
+  }
 
   let photos = DEFAULTS.map(src => ({ src }));   // [{key?, src}]
   let imgs = [], idx = 0, timer = null, unlocked = false;
@@ -1098,10 +1133,20 @@ ${coords}
     if (!bannerRef) { note('ยังเชื่อม Firebase ไม่ได้'); return; }
     if (!checkPin()) return;
     selected.clear();
+    // เติมค่าปัจจุบันในช่องแก้ข้อความ
+    if (el('opTopic'))  el('opTopic').value  = curTopic;
+    if (el('opStatus')) el('opStatus').value = curStatus;
     el('opManageModal').style.display = 'flex';
     renderGrid();
   }
   el('opManage').onclick = openManage;
+  el('opTextSave').onclick = () => {
+    if (!metaRef) { note('ยังเชื่อม Firebase ไม่ได้'); return; }
+    const topic = el('opTopic').value.trim(), status = el('opStatus').value.trim();
+    metaRef.set({ topic: topic, status: status, t: Date.now() })
+      .then(() => note('บันทึกข้อความแล้ว ✓'))
+      .catch(e => note('บันทึกไม่สำเร็จ: ' + (e && e.message)));
+  };
   el('opManageClose').onclick = () => { el('opManageModal').style.display = 'none'; };
   el('opSelDel').onclick = () => {
     if (!selected.size) { note('ยังไม่ได้เลือกรูป'); return; }
