@@ -107,6 +107,13 @@
   .op-te-field label{font-size:.74rem; color:var(--ink3); text-transform:uppercase; letter-spacing:.05em;}
   .op-textedit input{background:#1c2c47; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:.9rem; font-family:inherit;}
   #opTextSave{background:var(--accent); color:#042038; border:none; border-radius:8px; padding:9px 16px; font-size:.85rem; font-weight:700; cursor:pointer; white-space:nowrap;}
+  /* mini locator map มุมซ้ายล่าง */
+  #miniWrap{position:absolute; left:10px; bottom:10px; z-index:800; background:#04101f;
+    border:1px solid var(--line); border-radius:10px; overflow:hidden; box-shadow:0 3px 12px rgba(0,0,0,.55);}
+  #miniMap{width:172px; height:150px; background:#0e1a2e;}
+  #miniWrap .mini-credit{font-size:.66rem; color:#cfe0f5; text-align:center; padding:3px 6px;
+    background:rgba(11,21,38,.82); border-top:1px solid var(--line); letter-spacing:.02em;}
+  @media (max-width:640px){ #miniMap{width:120px; height:104px;} }
   /* ป้ายเลข line number ของ pre-plot */
   .preplot-label{background:transparent !important; border:none !important; color:#e0e0e0;
     font-size:11px; font-weight:700; text-align:center; white-space:nowrap;
@@ -254,7 +261,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-08-9';
+const BUILD = '2026-08-08-10';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -269,14 +276,30 @@ const fmt = (n, d) => (n == null || isNaN(n)) ? '–' : Number(n).toFixed(d);
 
 // ---------- Map ----------
 const map = L.map('map', { zoomControl: true }).setView([11.6, 100.95], 10);
-// ป้ายเครดิตมุมซ้ายล่าง
-const gscCredit = L.control({ position: 'bottomleft' });
-gscCredit.onAdd = function () {
-  const d = L.DomUtil.create('div', 'gsc-credit');
-  d.innerHTML = 'Software by GSC Team';
-  return d;
-};
-gscCredit.addTo(map);
+
+// ---------- Mini locator map (มุมซ้ายล่าง: เห็นเรืออยู่ตรงไหนในอ่าวไทย) ----------
+const miniWrap = document.createElement('div');
+miniWrap.id = 'miniWrap';
+miniWrap.innerHTML = '<div id="miniMap"></div><div class="mini-credit">Software by GSC Team</div>';
+document.getElementById('map').appendChild(miniWrap);
+const GULF_BOUNDS = [[6.2, 99.2], [13.7, 104.9]];   // กรอบอ่าวไทย
+const mini = L.map('miniMap', {
+  zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false,
+  doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false, tap: false
+});
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}', { maxZoom: 10 }).addTo(mini);
+mini.fitBounds(GULF_BOUNDS);
+setTimeout(() => { mini.invalidateSize(); mini.fitBounds(GULF_BOUNDS); }, 400);
+let miniMarker = null;
+const miniRect = L.rectangle(GULF_BOUNDS, { color: '#f59e0b', weight: 1.5, fill: false, opacity: .9 });
+function updateMini(lat, lon) {
+  if (lat == null || lon == null || isNaN(lat)) return;
+  if (!miniMarker) miniMarker = L.circleMarker([lat, lon], { radius: 5, color: '#fff', weight: 1.6, fillColor: '#3d9bff', fillOpacity: 1 }).addTo(mini);
+  else miniMarker.setLatLng([lat, lon]);
+}
+function updateMiniRect() { if (!mini.hasLayer(miniRect)) miniRect.addTo(mini); miniRect.setBounds(map.getBounds()); }
+map.on('moveend zoomend', updateMiniRect);
+setTimeout(updateMiniRect, 600);
 const osmBase = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19, attribution: '© OpenStreetMap'
 });
@@ -506,6 +529,7 @@ else {
     if ((hdg == null || isNaN(hdg)) && lastCurLL) hdg = bearingDeg(lastCurLL, p);
     if (hdg == null || isNaN(hdg)) hdg = estimateHeading();
     drawStreamers(p.lat, p.lon, hdg);
+    updateMini(p.lat, p.lon);
     lastCurLL = { lat: p.lat, lon: p.lon, hd: hdg };
     marker.bindPopup(`<b>${VESSEL_ID}</b><br>${fmt(p.lat,5)}, ${fmt(p.lon,5)}<br>Speed ${fmt(p.sp,1)} kn · Heading ${fmt(p.hd,0)}°<br>${new Date(p.t).toLocaleString('en-GB')}`);
     if (follow) map.panTo(ll);
