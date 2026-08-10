@@ -254,7 +254,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-08-8';
+const BUILD = '2026-08-08-9';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -959,7 +959,8 @@ ${coords}
     $('sAgo').textContent = sec < 60 ? sec + 's' : sec < 3600 ? Math.floor(sec/60) + ' min' : Math.floor(sec/3600) + ' hr';
     const online = sec <= STALE_SEC;
     $('badge').className = 'badge ' + (online ? 'on' : 'off');
-    $('badgeText').textContent = online ? 'Online' : 'Signal lost (' + $('sAgo').textContent + ' ago)';
+    const srcLbl = (lastPoint && lastPoint.src === 'phone') ? ' · 📱 GPS' : (lastPoint && lastPoint.src === 'hifleet') ? ' · 🛰 AIS' : '';
+    $('badgeText').textContent = online ? ('Online' + srcLbl) : 'Signal lost (' + $('sAgo').textContent + ' ago)';
   }
   setInterval(updateAgo, 5000);
 }

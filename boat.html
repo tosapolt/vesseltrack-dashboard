@@ -164,12 +164,14 @@ function send(c, now) {
     lon: +c.longitude.toFixed(6),
     sp:  c.speed   != null ? +(c.speed * MS2KN).toFixed(2) : null,
     hd:  c.heading != null ? +c.heading.toFixed(1) : null,
-    acc: c.accuracy != null ? +c.accuracy.toFixed(0) : null
+    acc: c.accuracy != null ? +c.accuracy.toFixed(0) : null,
+    src: "phone"
   };
   const base = db.ref('vessels/' + VESSEL_ID);
   Promise.all([
     base.child('current').set(point),
-    base.child('track').push(point)
+    base.child('track').push(point),
+    base.child('phoneBeat').set(now)   // heartbeat: บอก HiFleet ว่ามือถือ active (GPS มี priority)
   ]).then(() => {
     count++;
     $('vCnt').innerHTML = count + ' <span class="unit">times</span>';
