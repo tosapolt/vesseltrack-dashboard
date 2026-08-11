@@ -274,7 +274,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-10-13';
+const BUILD = '2026-08-10-14';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -524,15 +524,25 @@ else {
 
   let lastPoint = null;
   let lastPhoneReceived = 0;
-  const PHONE_PRIORITY_MS = 150000;  // มือถือส่ง GPS ภายใน 2.5 นาที = ให้ priority; ห้าม AIS (hifleet) ที่ค้างเด้งทับ
+  let lastHifleetLL = null;          // ตำแหน่ง AIS ครั้งก่อน — ใช้ดูว่า AIS ขยับจริงหรือค้าง
+  const PHONE_PRIORITY_MS = 150000;  // มือถือส่ง GPS ภายใน 2.5 นาที = live priority
 
   let lastAppliedT = 0;
   function applyCurrent(p) {
     if (!p || !p.lat) return;
     if (p.t && p.t === lastAppliedT) return;   // ไม่ทำซ้ำจุดเดิม
-    // GPS priority: ถ้ามือถือเพิ่งส่ง อย่าให้จุด AIS ที่ค้างมากระโดดทับตำแหน่งจริง
-    if (p.src === 'phone') lastPhoneReceived = Date.now();
-    else if (p.src === 'hifleet' && Date.now() - lastPhoneReceived < PHONE_PRIORITY_MS) return;
+    // ---- ลำดับความสำคัญของแหล่งตำแหน่ง: GPS (มือถือ) มาก่อน AIS ที่ค้าง ----
+    if (p.src === 'phone') {
+      lastPhoneReceived = Date.now();
+    } else if (p.src === 'hifleet') {
+      const phoneLive = Date.now() - lastPhoneReceived < PHONE_PRIORITY_MS;
+      const aisMoved  = !lastHifleetLL || haversineNm(p, lastHifleetLL) > FROZEN_EPS_NM;
+      lastHifleetLL = { lat: p.lat, lon: p.lon };
+      // มือถือกำลังส่ง → ใช้ GPS; หรือถ้าเคยมี GPS แล้วและ AIS ค้าง(ไม่ขยับ) → ยึดตำแหน่ง GPS ล่าสุดไว้ ไม่ดึงกลับจุดเก่า
+      if (phoneLive) return;
+      if (lastPhoneReceived > 0 && !aisMoved) return;
+      // (AIS ขยับจริง = มีตำแหน่งใหม่ → ยอมให้ใช้ตามปกติ)
+    }
     lastPoint = p;
     const ll = [p.lat, p.lon];
     if (!marker) {
@@ -1032,21 +1042,20 @@ ${coords}
   function updateAgo() {
     if (!lastPoint) return;
     const now = Date.now();
-    const tsSec = Math.floor((now - lastPoint.t) / 1000);          // อายุ feed (อาจถูกประทับเวลาใหม่)
     const live = (rangeTo === localDateStr(new Date()));           // กำลังดูข้อมูลสด ไม่ใช่ย้อนหลัง
-    const moveSec = live ? Math.floor((now - lastMovementT()) / 1000) : tsSec;  // อายุตำแหน่งจริง
-    const isAis = lastPoint.src === 'hifleet';
-    const feedDead = tsSec > STALE_SEC;                            // ไม่มีข้อมูลเข้าเลย
-    const frozen = live && !feedDead && isAis && moveSec > STALE_MOVE_SEC;  // feed มา แต่พิกัดค้าง = AIS หาย
-    // "Last update" = อายุตำแหน่งจริง (ครั้งสุดท้ายที่ขยับ)
-    $('sAgo').textContent = fmtDur(moveSec);
-    const srcLbl = lastPoint.src === 'phone' ? ' · 📱 GPS' : isAis ? ' · 🛰 AIS' : '';
-    if (feedDead) {
+    const isPhone = lastPoint.src === 'phone';
+    const isAis   = lastPoint.src === 'hifleet';
+    // อายุ "ตำแหน่งจริงล่าสุด": GPS ใช้เวลาจุดมือถือตรงๆ / AIS ใช้เวลาที่ขยับจริงล่าสุด
+    const ageSec = isPhone
+      ? Math.floor((now - lastPoint.t) / 1000)
+      : Math.floor((now - (live ? lastMovementT() : lastPoint.t)) / 1000);
+    $('sAgo').textContent = fmtDur(ageSec);
+    const lost = ageSec > (isPhone ? STALE_SEC : STALE_MOVE_SEC);   // GPS หยุด 5 นาที / AIS ค้าง 15 นาที
+    const srcLbl = isPhone ? ' · 📱 GPS' : isAis ? ' · 🛰 AIS' : '';
+    if (lost) {
       $('badge').className = 'badge off';
-      $('badgeText').textContent = 'Signal lost (' + fmtDur(tsSec) + ' ago)';
-    } else if (frozen) {
-      $('badge').className = 'badge off';
-      $('badgeText').textContent = '⚠ AIS signal lost · last update ' + fmtDur(moveSec) + ' ago';
+      $('badgeText').textContent = (isPhone ? '📱 GPS signal lost' : '⚠ AIS signal lost')
+        + ' · last update ' + fmtDur(ageSec) + ' ago';
     } else {
       $('badge').className = 'badge on';
       $('badgeText').textContent = 'Online' + srcLbl;
