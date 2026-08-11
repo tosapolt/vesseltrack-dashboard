@@ -274,7 +274,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-10-14';
+const BUILD = '2026-08-10-15';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -524,25 +524,51 @@ else {
 
   let lastPoint = null;
   let lastPhoneReceived = 0;
-  let lastHifleetLL = null;          // ตำแหน่ง AIS ครั้งก่อน — ใช้ดูว่า AIS ขยับจริงหรือค้าง
+  let rawCurrent = null;             // ค่า current ดิบล่าสุดจาก Firebase (ก่อนตัดสินใจว่าจะโชว์จุดไหน)
+  let lastRenderKey = '';
   const PHONE_PRIORITY_MS = 150000;  // มือถือส่ง GPS ภายใน 2.5 นาที = live priority
 
-  let lastAppliedT = 0;
+  // รับ current ใหม่ → เก็บไว้ แล้วตัดสินใจ (GPS/AIS)
   function applyCurrent(p) {
     if (!p || !p.lat) return;
-    if (p.t && p.t === lastAppliedT) return;   // ไม่ทำซ้ำจุดเดิม
-    // ---- ลำดับความสำคัญของแหล่งตำแหน่ง: GPS (มือถือ) มาก่อน AIS ที่ค้าง ----
-    if (p.src === 'phone') {
-      lastPhoneReceived = Date.now();
-    } else if (p.src === 'hifleet') {
-      const phoneLive = Date.now() - lastPhoneReceived < PHONE_PRIORITY_MS;
-      const aisMoved  = !lastHifleetLL || haversineNm(p, lastHifleetLL) > FROZEN_EPS_NM;
-      lastHifleetLL = { lat: p.lat, lon: p.lon };
-      // มือถือกำลังส่ง → ใช้ GPS; หรือถ้าเคยมี GPS แล้วและ AIS ค้าง(ไม่ขยับ) → ยึดตำแหน่ง GPS ล่าสุดไว้ ไม่ดึงกลับจุดเก่า
-      if (phoneLive) return;
-      if (lastPhoneReceived > 0 && !aisMoved) return;
-      // (AIS ขยับจริง = มีตำแหน่งใหม่ → ยอมให้ใช้ตามปกติ)
+    if (p.src === 'phone') lastPhoneReceived = Date.now();
+    rawCurrent = p;
+    decideAndRender();
+  }
+  // จุด GPS (มือถือ) ล่าสุดในประวัติวันนี้
+  function latestPhonePt() {
+    for (let i = loadedPts.length - 1; i >= 0; i--) if (loadedPts[i] && loadedPts[i].src === 'phone') return loadedPts[i];
+    return null;
+  }
+  // AIS ค้างอยู่ตำแหน่งเดิมมาตั้งแต่เมื่อไหร่ (เดินย้อนประวัติหาจุดที่เริ่มไม่ขยับ)
+  function hifleetFrozenStartT(cur) {
+    let t = cur.t || Date.now();
+    for (let i = loadedPts.length - 1; i >= 0; i--) {
+      const q = loadedPts[i];
+      if (!q || haversineNm(q, cur) > FROZEN_EPS_NM) break;
+      t = q.t;
     }
+    return t;
+  }
+  // เลือกจุดที่จะแสดง: มือถือสด / หรือ GPS ล่าสุด(เมื่อ AIS ค้าง) มาก่อน AIS ที่ค้าง
+  function decideAndRender() {
+    if (!rawCurrent) return;
+    let show = rawCurrent;
+    const live = (rangeTo === localDateStr(new Date()));
+    if (live && rawCurrent.src === 'hifleet' && Date.now() - lastPhoneReceived >= PHONE_PRIORITY_MS) {
+      const staleSec = (Date.now() - hifleetFrozenStartT(rawCurrent)) / 1000;
+      if (staleSec > STALE_MOVE_SEC) {          // AIS ค้าง → ยึดตำแหน่ง GPS ล่าสุดจากประวัติ
+        const ph = latestPhonePt();
+        if (ph) show = ph;
+      }
+    }
+    renderCurrent(show);
+  }
+  function renderCurrent(p) {
+    if (!p || !p.lat) return;
+    const key = (p.src || '') + '|' + (p.t || 0) + '|' + p.lat + '|' + p.lon;
+    if (key === lastRenderKey) return;          // ไม่วาดซ้ำจุดเดิม
+    lastRenderKey = key;
     lastPoint = p;
     const ll = [p.lat, p.lon];
     if (!marker) {
@@ -567,7 +593,6 @@ else {
     $('sLat').textContent = fmt(p.lat,5);
     $('sLon').textContent = fmt(p.lon,5);
     updateAgo();
-    lastAppliedT = p.t || 0;
   }
   base.child('current').on('value', snap => applyCurrent(snap.val()));
 
@@ -588,7 +613,7 @@ else {
         const tr = await fetch(url, { cache: 'no-store' }).then(r => r.json());
         if (tr) {
           const pts = Object.values(tr).filter(p => p && p.lat != null).sort((a, b) => a.t - b.t);
-          if (pts.length) { loadedPts = pts; renderTrack(); }
+          if (pts.length) { loadedPts = pts; renderTrack(); decideAndRender(); }
         }
       }
     } catch (e) { /* เน็ตสะดุด — รอบหน้าลองใหม่ */ }
@@ -668,6 +693,7 @@ else {
       loadedPts = [];
       snap.forEach(ch => { const p = ch.val(); if (p && p.lat != null) loadedPts.push(p); });
       renderTrack();
+      decideAndRender();   // ประวัติเปลี่ยน → ประเมินใหม่ (เผื่อยึด GPS ล่าสุดเมื่อ AIS ค้าง)
       if (lastCurLL) { const hh = (lastCurLL.hd!=null && !isNaN(lastCurLL.hd)) ? lastCurLL.hd : estimateHeading(); drawStreamers(lastCurLL.lat, lastCurLL.lon, hh); }
       if (loadedPts.length && rangeKey !== rangeDate) {
         rangeDate = rangeKey;
