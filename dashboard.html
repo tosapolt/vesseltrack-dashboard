@@ -274,7 +274,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-10-15';
+const BUILD = '2026-08-11-16';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -550,16 +550,19 @@ else {
     }
     return t;
   }
-  // เลือกจุดที่จะแสดง: มือถือสด / หรือ GPS ล่าสุด(เมื่อ AIS ค้าง) มาก่อน AIS ที่ค้าง
+  // เลือกจุดที่จะแสดง = "ตำแหน่งจริงล่าสุด" เทียบระหว่าง GPS กับ AIS
+  //  - มือถือส่งสด → ใช้ GPS
+  //  - ไม่งั้นเทียบเวลา: GPS ล่าสุด vs เวลาที่ AIS "ขยับจริง" ล่าสุด → อันไหนใหม่กว่าใช้อันนั้น
+  //    (กันเคส AIS ค้างที่จุดเก่าแล้วดึงหมุดกลับ และเคส AIS เพิ่งขยับมาจุดใหม่ก็ยังตามได้)
   function decideAndRender() {
     if (!rawCurrent) return;
     let show = rawCurrent;
     const live = (rangeTo === localDateStr(new Date()));
     if (live && rawCurrent.src === 'hifleet' && Date.now() - lastPhoneReceived >= PHONE_PRIORITY_MS) {
-      const staleSec = (Date.now() - hifleetFrozenStartT(rawCurrent)) / 1000;
-      if (staleSec > STALE_MOVE_SEC) {          // AIS ค้าง → ยึดตำแหน่ง GPS ล่าสุดจากประวัติ
-        const ph = latestPhonePt();
-        if (ph) show = ph;
+      const ph = latestPhonePt();
+      if (ph) {
+        const aisMovedT = hifleetFrozenStartT(rawCurrent);  // AIS ขยับมาอยู่จุดปัจจุบันเมื่อไหร่ = เวลาจริงล่าสุดของ AIS
+        if (ph.t > aisMovedT) show = ph;                    // GPS ใหม่กว่าตำแหน่งจริงล่าสุดของ AIS → ยึด GPS
       }
     }
     renderCurrent(show);
