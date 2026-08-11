@@ -86,6 +86,15 @@
   #opBanner .op-tools #opDel{border-color:rgba(231,76,60,.7);}
   #opBanner .op-note{position:absolute; z-index:3; top:52px; right:16px; background:rgba(11,21,38,.85);
     color:#cfe0f5; font-size:.75rem; padding:5px 10px; border-radius:7px; display:none; max-width:60%;}
+  #opBanner .op-close{position:absolute; z-index:3; top:14px; left:16px; width:34px; height:34px;
+    display:flex; align-items:center; justify-content:center; background:rgba(11,21,38,.78); color:#eaf1fb;
+    border:1px solid rgba(231,76,60,.6); border-radius:8px; font-size:1.05rem; font-weight:700;
+    cursor:pointer; backdrop-filter:blur(2px); line-height:1;}
+  #opBanner .op-close:hover{background:rgba(231,76,60,.92); color:#fff;}
+  #opShow{position:fixed; top:14px; right:16px; z-index:1200; display:none; background:rgba(11,21,38,.9);
+    color:#eaf1fb; border:1px solid rgba(61,155,255,.6); border-radius:8px; padding:7px 12px;
+    font-size:.85rem; font-weight:700; cursor:pointer; box-shadow:0 2px 10px rgba(0,0,0,.5);}
+  #opShow:hover{background:rgba(61,155,255,.9); color:#042038;}
   /* หน้าจัดการรูป Banner */
   .op-modal{position:fixed; inset:0; z-index:4000; background:rgba(3,10,22,.82); display:flex; align-items:center; justify-content:center; padding:24px;}
   .op-modal-card{background:var(--card); border:1px solid var(--line); border-radius:14px; width:min(920px,94vw); max-height:86vh; display:flex; flex-direction:column; box-shadow:0 12px 44px rgba(0,0,0,.6);}
@@ -176,6 +185,7 @@
 <div id="map"></div>
 
 <div id="opBanner">
+  <button class="op-close" id="opClose" title="ปิด banner">✕</button>
   <div class="slides" id="opSlides"></div>
   <div class="veil"></div>
   <div class="cap">
@@ -189,6 +199,7 @@
   <div class="dots" id="opDots"></div>
   <input type="file" id="opFile" accept="image/*" multiple style="display:none">
 </div>
+<button id="opShow" title="แสดง banner">🖼 Banner</button>
 
 <div id="opManageModal" class="op-modal" style="display:none">
   <div class="op-modal-card">
@@ -263,7 +274,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-10-12';
+const BUILD = '2026-08-10-13';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -1066,6 +1077,11 @@ ${coords}
   const wrap = el('opSlides');
   const dots = el('opDots');
   if (!bar || !wrap) return;
+
+  // ---------- ปุ่มปิด/เปิด banner ----------
+  const showBtn = el('opShow'), closeBtn = el('opClose');
+  if (closeBtn) closeBtn.onclick = () => { bar.classList.add('hidden'); if (showBtn) showBtn.style.display = 'block'; };
+  if (showBtn)  showBtn.onclick  = () => { bar.classList.remove('hidden'); showBtn.style.display = 'none'; };
 
   // เชื่อม Firebase (ถ้า main script init ไว้แล้ว) — ถ้าไม่ได้ ใช้รูป default อย่างเดียว
   let bannerRef = null, metaRef = null;
