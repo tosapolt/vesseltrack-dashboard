@@ -127,6 +127,20 @@
   .preplot-label{background:transparent !important; border:none !important; color:#e0e0e0;
     font-size:11px; font-weight:700; text-align:center; white-space:nowrap;
     text-shadow:0 0 3px #000, 0 0 4px #000, 0 0 4px #000;}
+  .preplot-label.done{color:#4ade80;}
+  /* ---- Acquired lines modal ---- */
+  #linesModal{position:fixed; inset:0; z-index:4000; background:rgba(3,10,22,.82); display:none; align-items:center; justify-content:center; padding:20px;}
+  #linesModal .lm-card{background:#0e1c33; border:1px solid #22344f; border-radius:14px; width:min(660px,96vw); max-height:88vh; overflow:auto; padding:18px 20px; color:#eaf1fb;}
+  #linesModal h3{margin:0 0 4px; font-size:1.15rem;}
+  #linesModal .lm-sub{color:#9fb2cc; font-size:.85rem; margin-bottom:12px; line-height:1.5;}
+  #linesModal .lm-row{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px;}
+  #linesModal .lm-row input[type=text]{flex:1; min-width:180px; background:#0b1526; border:1px solid #22344f; color:#eaf1fb; border-radius:8px; padding:9px 11px; font-size:.9rem;}
+  #linesModal .lm-row button{background:#1c2c47; color:#eaf1fb; border:1px solid rgba(61,155,255,.5); border-radius:8px; padding:9px 13px; font-size:.85rem; font-weight:600; cursor:pointer;}
+  #linesModal .lm-row button:hover{background:rgba(61,155,255,.85); color:#042038;}
+  #linesModal .lm-grid{display:flex; flex-wrap:wrap; gap:6px;}
+  #linesModal .line-chip{background:#152036; border:1px solid #2b3d59; color:#c8d6ec; border-radius:7px; padding:7px 10px; font-size:.82rem; font-weight:600; cursor:pointer; font-variant-numeric:tabular-nums;}
+  #linesModal .line-chip.done{background:#16a34a; border-color:#22c55e; color:#eafff2;}
+  #linesModal .lm-count{font-weight:800; color:#4ade80; font-size:.95rem;}
   /* tooltip เครื่องมือวัดระยะ */
   .measure-tip{background:#f1c40f; color:#20160a; border:1px solid #b8860b; border-radius:6px;
     font-weight:700; font-size:.74rem; line-height:1.35; box-shadow:0 1px 5px rgba(0,0,0,.45); padding:4px 8px;}
@@ -153,6 +167,7 @@
   <button id="btnFit">🧭 Fit track</button>
   <button id="btnMeasure">📏 Measure</button>
   <button id="btnBanner" class="active">🖼 Banner</button>
+  <button id="btnLines" title="ไฮไลต์เส้นที่ยิงเสร็จ (Acquired)">✅ Lines</button>
   <div class="dropdown" id="polyDrop">
     <button id="btnPoly">🗂 Polygons ▾</button>
     <div class="dropdown-menu" id="polyMenu">
@@ -166,6 +181,24 @@
   </div>
   <input type="file" id="polyFile" accept=".kml,.kmz,.geojson,.json" style="display:none">
 </header>
+
+<!-- ✅ Acquired lines — ไฮไลต์เส้นที่ยิงเสร็จ -->
+<div id="linesModal">
+  <div class="lm-card">
+    <h3>✅ Acquired lines <span class="lm-count" id="lmCount"></span></h3>
+    <div class="lm-sub">แตะเลข line ที่ยิงเสร็จ → เส้นบนแผนที่จะเป็นสีเขียว ซิงค์ให้ทุกคนเห็น (ใส่ PIN ครั้งแรก) · หรือคลิกเส้นบนแผนที่ก็ได้</div>
+    <div class="lm-row">
+      <input type="text" id="lmInput" placeholder="พิมพ์เลข line เช่น 1936, 1960  หรือช่วง 1984-2032">
+      <button id="lmMark">✓ ทำเป็นเสร็จ</button>
+      <button id="lmUnmark">↺ ยกเลิก</button>
+    </div>
+    <div class="lm-grid" id="lmGrid"></div>
+    <div class="lm-row" style="margin-top:16px; justify-content:space-between;">
+      <button id="lmClear" style="border-color:rgba(231,76,60,.6);">🗑 ล้างทั้งหมด</button>
+      <button id="lmClose">ปิด</button>
+    </div>
+  </div>
+</div>
 
 <div class="playbar">
   <span class="pb-lbl">🎬 Replay</span>
@@ -274,7 +307,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-11-16';
+const BUILD = '2026-08-11-17';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -331,13 +364,24 @@ const seaLayer = L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.p
 // ---------- Pre-plot lines (จากไฟล์ P190.kmz) ----------
 const PREPLOT = [{"n":"2512","c":[[11.348776,101.028109],[11.710168,101.101272]]},{"n":"1024","c":[[11.350022,100.854646],[11.854982,100.956628]]},{"n":"1048","c":[[11.350047,100.857453],[11.858329,100.960112]]},{"n":"1072","c":[[11.349961,100.860238],[11.861677,100.963598]]},{"n":"1096","c":[[11.349987,100.863045],[11.864692,100.967015]]},{"n":"1120","c":[[11.350012,100.865852],[11.862056,100.969289]]},{"n":"1144","c":[[11.349926,100.868636],[11.859421,100.971562]]},{"n":"1168","c":[[11.349952,100.871443],[11.856785,100.973835]]},{"n":"1192","c":[[11.349866,100.874228],[11.854261,100.976131]]},{"n":"1216","c":[[11.349891,100.877035],[11.851625,100.978404]]},{"n":"1240","c":[[11.349916,100.879842],[11.848989,100.980677]]},{"n":"1264","c":[[11.349831,100.882626],[11.846353,100.98295]]},{"n":"1288","c":[[11.349856,100.885433],[11.843718,100.985223]]},{"n":"1312","c":[[11.34977,100.888218],[11.841082,100.987496]]},{"n":"1336","c":[[11.349795,100.891025],[11.838557,100.989791]]},{"n":"1360","c":[[11.349821,100.893831],[11.835921,100.992064]]},{"n":"1384","c":[[11.349735,100.896616],[11.833286,100.994337]]},{"n":"1408","c":[[11.349759,100.899422],[11.83065,100.99661]]},{"n":"1432","c":[[11.349674,100.902207],[11.828014,100.998883]]},{"n":"1456","c":[[11.349699,100.905014],[11.825378,101.001156]]},{"n":"1480","c":[[11.349723,100.907821],[11.822743,101.003429]]},{"n":"1504","c":[[11.349637,100.910605],[11.820217,101.005723]]},{"n":"1528","c":[[11.349663,100.913412],[11.817582,101.007996]]},{"n":"1552","c":[[11.349577,100.916197],[11.814946,101.010269]]},{"n":"1576","c":[[11.349602,100.919004],[11.81231,101.012541]]},{"n":"1600","c":[[11.349626,100.921811],[11.809674,101.014814]]},{"n":"1624","c":[[11.34954,100.924595],[11.807039,101.017086]]},{"n":"1648","c":[[11.349565,100.927401],[11.804513,101.019381]]},{"n":"1672","c":[[11.349479,100.930186],[11.801878,101.021653]]},{"n":"1696","c":[[11.349503,100.932993],[11.799241,101.023926]]},{"n":"1720","c":[[11.349417,100.935777],[11.796606,101.026198]]},{"n":"1744","c":[[11.349442,100.938584],[11.79397,101.02847]]},{"n":"1768","c":[[11.349466,100.941391],[11.791334,101.030742]]},{"n":"1792","c":[[11.34938,100.944176],[11.788809,101.033037]]},{"n":"1816","c":[[11.349405,100.946982],[11.786173,101.035309]]},{"n":"1840","c":[[11.349319,100.949767],[11.783537,101.037581]]},{"n":"1864","c":[[11.349343,100.952573],[11.780901,101.039853]]},{"n":"1888","c":[[11.349367,100.95538],[11.778265,101.042125]]},{"n":"1912","c":[[11.349281,100.958165],[11.775629,101.044397]]},{"n":"1936","c":[[11.349306,100.960972],[11.772993,101.046669]]},{"n":"1960","c":[[11.34922,100.963756],[11.770468,101.048963]]},{"n":"1984","c":[[11.349243,100.966562],[11.767831,101.051235]]},{"n":"2008","c":[[11.349268,100.969369],[11.765196,101.053507]]},{"n":"2032","c":[[11.349182,100.972154],[11.762559,101.055778]]},{"n":"2056","c":[[11.349205,100.974961],[11.759924,101.05805]]},{"n":"2080","c":[[11.349119,100.977745],[11.757287,101.060322]]},{"n":"2104","c":[[11.349143,100.980551],[11.754762,101.062616]]},{"n":"2128","c":[[11.349168,100.983358],[11.752126,101.064887]]},{"n":"2152","c":[[11.349081,100.986143],[11.74949,101.067159]]},{"n":"2176","c":[[11.349105,100.98895],[11.746854,101.06943]]},{"n":"2200","c":[[11.349018,100.991734],[11.744218,101.071702]]},{"n":"2224","c":[[11.349043,100.99454],[11.741581,101.073973]]},{"n":"2248","c":[[11.349066,100.997348],[11.739056,101.076268]]},{"n":"2272","c":[[11.34898,101.000132],[11.73642,101.078539]]},{"n":"2296","c":[[11.349004,101.002938],[11.733784,101.080809]]},{"n":"2320","c":[[11.348917,101.005722],[11.731147,101.083081]]},{"n":"2344","c":[[11.348941,101.00853],[11.728512,101.085352]]},{"n":"2368","c":[[11.348854,101.011314],[11.725875,101.087623]]},{"n":"2392","c":[[11.348878,101.01412],[11.723239,101.089894]]},{"n":"2416","c":[[11.348901,101.016927],[11.720713,101.092188]]},{"n":"2440","c":[[11.348815,101.019711],[11.718078,101.094459]]},{"n":"2464","c":[[11.348839,101.022518],[11.715441,101.09673]]},{"n":"2488","c":[[11.348752,101.025302],[11.712805,101.099001]]}];
 const preLayer = L.layerGroup();
+const preLinePolys = {};                 // เลข line -> polyline (ไว้เปลี่ยนสีตอน acquire เสร็จ)
+let doneLinesSet = {};                    // { "1936": true, ... } เส้นที่ยิงเสร็จแล้ว
 PREPLOT.forEach(l => {
-  L.polyline(l.c, { color: '#808080', weight: 1, opacity: .55 })
-    .bindTooltip('Line ' + l.n, { sticky: true })
-    .addTo(preLayer);
+  const pl = L.polyline(l.c, { color: '#808080', weight: 1, opacity: .55 })
+    .bindTooltip('Line ' + l.n, { sticky: true });
+  preLinePolys[l.n] = pl;
+  pl.addTo(preLayer);
 });
 let preOn = true;
 preLayer.addTo(map);
+
+function isLineDone(n) { return !!doneLinesSet[String(n)]; }
+function restyleLine(n) {
+  const pl = preLinePolys[n]; if (!pl) return;
+  if (isLineDone(n)) pl.setStyle({ color: '#22c55e', weight: 4, opacity: .97 });
+  else pl.setStyle({ color: '#808080', weight: 1, opacity: .55 });
+}
+function restyleAllLines() { PREPLOT.forEach(l => restyleLine(l.n)); refreshPreLabels(); }
 
 // ---------- Pre-plot line-number labels (โชว์ตอนซูมเข้า เกาะเส้นใกล้จุดที่ดู) ----------
 const preLabels = L.layerGroup();
@@ -358,7 +402,7 @@ function refreshPreLabels() {
       }
     }
     if (best) L.marker(best, {
-      icon: L.divIcon({ className: 'preplot-label', html: l.n, iconSize: [40, 16], iconAnchor: [20, 8] }),
+      icon: L.divIcon({ className: 'preplot-label' + (isLineDone(l.n) ? ' done' : ''), html: l.n, iconSize: [40, 16], iconAnchor: [20, 8] }),
       interactive: false, keyboard: false
     }).addTo(preLabels);
   });
@@ -1091,6 +1135,57 @@ ${coords}
     }
   }
   setInterval(updateAgo, 5000);
+
+  // ---------- ✅ Acquired lines (ไฮไลต์เส้นที่ยิงเสร็จ, ซิงค์ทุกเครื่อง) ----------
+  const LINES_PIN = 'gsc2026';
+  let linesPinOK = false;
+  const doneRef = base.child('doneLines');
+  function linesEnsurePin() {
+    if (linesPinOK) return true;
+    const v = prompt('ใส่ PIN เพื่ออัปเดตสถานะเส้นที่ยิงเสร็จ:');
+    if (v === null) return false;
+    if (v === LINES_PIN) { linesPinOK = true; return true; }
+    alert('PIN ไม่ถูกต้อง'); return false;
+  }
+  function setLineDone(n, done) { n = String(n); if (done) doneRef.child(n).set(true); else doneRef.child(n).remove(); }
+  function toggleLineDone(n) { if (!linesEnsurePin()) return; setLineDone(n, !isLineDone(n)); }
+  // แปลงข้อความเป็นรายการเลข line จริง (รองรับ comma และช่วง 1984-2032)
+  function parseLineList(str) {
+    const out = [];
+    (str || '').split(',').forEach(part => {
+      part = part.trim(); if (!part) return;
+      const m = part.match(/^(\d+)\s*-\s*(\d+)$/);
+      if (m) { const lo = Math.min(+m[1], +m[2]), hi = Math.max(+m[1], +m[2]);
+        PREPLOT.forEach(l => { const v = +l.n; if (v >= lo && v <= hi) out.push(l.n); });
+      } else if (/^\d+$/.test(part)) { const hit = PREPLOT.find(l => l.n === part); if (hit) out.push(hit.n); }
+    });
+    return [...new Set(out)];
+  }
+  function renderLinesGrid() {
+    const g = $('lmGrid'); if (!g) return;
+    g.innerHTML = '';
+    PREPLOT.forEach(l => {
+      const b = document.createElement('button');
+      b.className = 'line-chip' + (isLineDone(l.n) ? ' done' : '');
+      b.textContent = l.n;
+      b.onclick = () => toggleLineDone(l.n);
+      g.appendChild(b);
+    });
+  }
+  function updateLinesCount() {
+    const done = PREPLOT.filter(l => isLineDone(l.n)).length;
+    const c = $('lmCount'); if (c) c.textContent = done + ' / ' + PREPLOT.length + ' เสร็จ';
+  }
+  // ซิงค์จาก Firebase → ทาสีเส้น + อัปเดต UI
+  doneRef.on('value', snap => { doneLinesSet = snap.val() || {}; restyleAllLines(); renderLinesGrid(); updateLinesCount(); });
+  // คลิกเส้นบนแผนที่เพื่อสลับสถานะ
+  PREPLOT.forEach(l => { const pl = preLinePolys[l.n]; if (pl) pl.on('click', () => toggleLineDone(l.n)); });
+  // ปุ่ม/โมดัล
+  $('btnLines').onclick = () => { renderLinesGrid(); updateLinesCount(); $('linesModal').style.display = 'flex'; };
+  $('lmClose').onclick = () => { $('linesModal').style.display = 'none'; };
+  $('lmMark').onclick = () => { if (!linesEnsurePin()) return; parseLineList($('lmInput').value).forEach(n => setLineDone(n, true)); $('lmInput').value = ''; };
+  $('lmUnmark').onclick = () => { if (!linesEnsurePin()) return; parseLineList($('lmInput').value).forEach(n => setLineDone(n, false)); $('lmInput').value = ''; };
+  $('lmClear').onclick = () => { if (!linesEnsurePin()) return; if (confirm('ล้างสถานะ "เส้นที่ยิงเสร็จ" ทั้งหมดสำหรับทุกคน?')) doneRef.remove(); };
 }
 </script>
 
