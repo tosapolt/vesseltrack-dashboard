@@ -307,7 +307,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-12-19';
+const BUILD = '2026-08-12-20';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -571,7 +571,7 @@ else {
   let rawCurrent = null;             // ค่า current ดิบล่าสุดจาก Firebase (ก่อนตัดสินใจว่าจะโชว์จุดไหน)
   let lastRenderKey = '';
   const PHONE_PRIORITY_MS = 150000;  // มือถือส่ง GPS ภายใน 2.5 นาที = live priority
-  const SPEED_LIMIT = 5.0, SPEED_WARN = 5.5;   // acquisition: ≤5.0 ดี(เขียว), ≤5.5 ระวัง(ส้ม), >5.5 เร็วไป noise เยอะ(แดง)
+  const SPEED_LIMIT = 4.5, SPEED_WARN = 5.5;   // acquisition: ≤4.5 เขียว, 4.5–5.5 ส้ม, >5.5 แดง
 
   // ตำแหน่งเพี้ยน/กระโดด → ไม่แสดง
   function isBadFix(p) {
@@ -654,8 +654,7 @@ else {
     marker.bindPopup(`<b>${VESSEL_ID}</b><br>${fmt(p.lat,5)}, ${fmt(p.lon,5)}<br>Speed ${fmt(p.sp,1)} kn · Heading ${fmt(p.hd,0)}°<br>${new Date(p.t).toLocaleString('en-GB')}`);
     if (follow) map.panTo(ll);
 
-    $('sSpd').innerHTML = fmt(p.sp,1) + ' <span class="unit">knots</span>'
-      + (p.sp != null && p.sp > SPEED_WARN ? ' <span style="color:#ef4444;font-weight:800;">⚠ fast</span>' : '');
+    $('sSpd').innerHTML = fmt(p.sp,1) + ' <span class="unit">knots</span>';
     $('sSpd').style.color = speedColor(p.sp);
     $('sHdg').innerHTML = fmt(p.hd,0) + ' <span class="unit">°</span>';
     $('sLat').textContent = fmt(p.lat,5);
