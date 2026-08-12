@@ -12,7 +12,7 @@
     --accent:#3d9bff; --good:#2ecc71; --bad:#e74c3c; --warn:#f1c40f;
   }
   *{box-sizing:border-box;}
-  body{margin:0; font-family:'Segoe UI',system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--ink); height:100vh; display:flex; flex-direction:column; overflow:hidden;}
+  body{margin:0; font-family:'Segoe UI',system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--ink); height:100vh; height:100dvh; display:flex; flex-direction:column; overflow:hidden;}
   header{display:flex; align-items:center; gap:12px; padding:10px 16px; background:var(--card); border-bottom:1px solid var(--line); flex-wrap:wrap;}
   header h1{font-size:1.05rem; margin:0;}
   .badge{display:flex; align-items:center; gap:6px; font-size:.85rem; padding:4px 12px; border-radius:99px; background:#1c2c47;}
@@ -37,6 +37,12 @@
   .tile .lbl{font-size:.68rem; color:var(--ink3); text-transform:uppercase; letter-spacing:.06em;}
   .tile .val{font-size:1.25rem; font-weight:600; margin-top:1px; font-variant-numeric:tabular-nums;}
   .tile .unit{font-size:.75rem; color:var(--ink2); font-weight:400;}
+  @media (max-width:640px){
+    .stats{grid-template-columns:repeat(3,1fr);}
+    .tile{padding:6px 9px;}
+    .tile .lbl{font-size:.6rem;}
+    .tile .val{font-size:1.02rem;}
+  }
   .cfgErr{position:absolute; inset:0; z-index:2000; background:rgba(11,21,38,.93); display:none; align-items:center; justify-content:center; padding:24px;}
   .cfgErr>div{max-width:440px; background:var(--card); border:1px solid #6b2020; border-radius:14px; padding:20px; line-height:1.7; font-size:.95rem;}
   code{background:#1c2c47; padding:1px 6px; border-radius:5px; font-size:.85em;}
@@ -307,7 +313,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-12-20';
+const BUILD = '2026-08-12-21';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
