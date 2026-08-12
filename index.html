@@ -307,7 +307,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-11-17';
+const BUILD = '2026-08-12-18';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -451,7 +451,7 @@ function estimateHeading() {
 
 // หา sail line (เส้น pre-plot ที่ใกล้เรือสุด) → คืน azimuth ของเส้น + จุดโปรเจกต์บนเส้น
 // เพื่อให้ streamer วาง "ขนาน" กับ sail line และ "อยู่ตรงกลาง" เส้น (ไม่อิงหัวเรือที่ส่าย)
-const STR_SNAP_MAX_M = 3000;   // ถ้าเรือห่างเส้นเกินนี้ ถือว่าไม่ได้อยู่บนไลน์
+const STR_SNAP_MAX_M = 150;    // ถ้าเรือห่างเส้นเกินนี้ ถือว่ายังไม่ได้อยู่บนไลน์ (เส้นห่าง ~277 ม. → ครึ่งหนึ่ง) ตอนเลี้ยว/เข้าไลน์ให้ลาก streamer จากท้ายเรือตามหัวเรือแทน
 function sailLineFor(lat, lon, hd) {
   if (typeof PREPLOT === 'undefined' || !PREPLOT.length) return null;
   const mE = Math.cos(lat * Math.PI / 180) * 111320, mN = 110540;   // เมตรต่อองศา (east/north)
