@@ -306,7 +306,7 @@ const firebaseConfig = {
   appId: "1:994797595177:web:1d948a195b37ae40ec0a38"
 };
 
-const VESSEL_ID    = "seismic-1"; // ต้องตรงกับใน boat.html
+const VESSEL_ID    = new URLSearchParams(location.search).get('id') || "seismic-1"; // ?id=test-1 = ดูเรือทดสอบ
 const TRACK_POINTS = 1000;        // จำนวนจุดเส้นทางย้อนหลังที่ดึงมาแสดง (แบบวันเดียว)
 const RANGE_POINTS = 8000;        // จำนวนจุดสูงสุดเมื่อดูแบบช่วงหลายวัน
 const STALE_SEC    = 300;         // เกินกี่วินาทีถือว่า feed ขาด (ไม่มีข้อมูลเข้าเลย)
@@ -318,7 +318,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-12-25';
+const BUILD = '2026-08-12-26';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
