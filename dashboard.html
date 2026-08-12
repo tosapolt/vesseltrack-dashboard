@@ -176,8 +176,7 @@
   <button id="btnStr" class="active">🎣 Streamers</button>
   <button id="btnFit">🧭 Fit track</button>
   <button id="btnMeasure">📏 Measure</button>
-  <button id="btnSpeedTrack" title="ระบายสีเส้น track ตามความเร็ว (รีวิว noise ย้อนหลัง)">🎨 Speed</button>
-  <button id="btnTrack" class="active" title="เปิด/ปิดเส้นเส้นทางเดินเรือ (track)">🧵 Track</button>
+  <button id="btnSpeedTrack" title="โหมดดูความเร็ว: ซ่อนทุกอย่าง เหลือแต่เส้นทางเรือระบายสีความเร็ว">🎨 Speed</button>
   <button id="btnBanner" class="active">🖼 Banner</button>
   <button id="btnLines" title="ไฮไลต์เส้นที่ยิงเสร็จ (Acquired)">✅ Lines</button>
   <div class="dropdown" id="polyDrop">
@@ -319,7 +318,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-12-24';
+const BUILD = '2026-08-12-25';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -400,6 +399,7 @@ const preLabels = L.layerGroup();
 const PRE_LABEL_ZOOM = 12;
 function refreshPreLabels() {
   preLabels.clearLayers();
+  if (speedColorOn) { if (map.hasLayer(preLabels)) map.removeLayer(preLabels); return; }   // โหมด Speed = ซ่อน
   if (!preOn || map.getZoom() < PRE_LABEL_ZOOM) { if (map.hasLayer(preLabels)) map.removeLayer(preLabels); return; }
   if (!map.hasLayer(preLabels)) preLabels.addTo(map);
   const b = map.getBounds(), c = map.getCenter();
@@ -438,7 +438,6 @@ let marker = null, follow = true;
 const trackLine = L.polyline([], { color: '#3d9bff', weight: 3, opacity: .85 }).addTo(map);
 const speedTrackLayer = L.layerGroup().addTo(map);   // เส้น track ระบายสีตามความเร็ว
 let speedColorOn = false;
-let trackOn = true;   // เปิด/ปิดเส้น track (เส้นทางเดินเรือ)
 // legend สีความเร็ว (โชว์เฉพาะตอนเปิดโหมดระบายสี)
 const spLegend = document.createElement('div');
 spLegend.id = 'speedLegend';
@@ -498,7 +497,7 @@ function sailLineFor(lat, lon, hd) {
 
 function drawStreamers(lat, lon, headingDeg) {
   streamerLayer.clearLayers();
-  if (!strOn) return;
+  if (!strOn || speedColorOn) return;   // โหมด Speed = ซ่อน streamer
   // ปรับให้ขนาน + อยู่ตรงกลาง sail line ถ้าเรืออยู่บนไลน์; ไม่งั้น fallback อิงหัวเรือ
   let aLat = lat, aLon = lon, az = headingDeg;
   const sail = sailLineFor(lat, lon, headingDeg);
@@ -775,7 +774,6 @@ else {
     const src = cleanPts();
     trackLine.setLatLngs(src.map(p => [p.lat, p.lon]));   // เก็บไว้เสมอ (ใช้ fit bounds)
     speedTrackLayer.clearLayers();
-    if (!trackOn) { trackLine.setStyle({ opacity: 0 }); return; }   // ปิดเส้น track
     if (!speedColorOn) { trackLine.setStyle({ opacity: .85 }); return; }
     // โหมดระบายสีตามความเร็ว: ซ่อนเส้นน้ำเงิน แล้ววาด segment สีตามความเร็ว
     trackLine.setStyle({ opacity: 0 });
@@ -792,16 +790,28 @@ else {
     }
     if (seg.length > 1) L.polyline(seg, { color: segColor, weight: 4, opacity: .9 }).addTo(speedTrackLayer);
   }
+  let speedSaved = null;
   $('btnSpeedTrack').onclick = () => {
     speedColorOn = !speedColorOn;
     $('btnSpeedTrack').classList.toggle('active', speedColorOn);
-    spLegend.style.display = (speedColorOn && trackOn) ? 'flex' : 'none';
-    renderTrack();
-  };
-  $('btnTrack').onclick = () => {
-    trackOn = !trackOn;
-    $('btnTrack').classList.toggle('active', trackOn);
-    spLegend.style.display = (speedColorOn && trackOn) ? 'flex' : 'none';
+    spLegend.style.display = speedColorOn ? 'flex' : 'none';
+    if (speedColorOn) {
+      // เข้าโหมด Speed: จำสถานะ layer ปัจจุบัน แล้วซ่อนทุกอย่าง เหลือแต่เส้นทางเรือ
+      speedSaved = { pre: map.hasLayer(preLayer), poly: map.hasLayer(polyLayer) };
+      map.removeLayer(preLayer);       // pre-plot + เส้น line ที่เสร็จ (เขียว)
+      map.removeLayer(polyLayer);      // polygon ที่อัปโหลด
+      if (map.hasLayer(preLabels)) map.removeLayer(preLabels);
+      streamerLayer.clearLayers();     // streamer
+    } else {
+      // ออกจากโหมด Speed: คืนทุกอย่างให้เหมือนก่อนกด
+      if (speedSaved) {
+        if (speedSaved.pre) preLayer.addTo(map);
+        if (speedSaved.poly) polyLayer.addTo(map);
+      }
+      speedSaved = null;
+      restyleAllLines();               // คืนสีเส้น line ที่เสร็จ + label
+      if (lastCurLL) drawStreamers(lastCurLL.lat, lastCurLL.lon, lastCurLL.hd);   // คืน streamer
+    }
     renderTrack();
   };
 
