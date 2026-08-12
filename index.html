@@ -134,7 +134,7 @@
     font-size:11px; font-weight:700; text-align:center; white-space:nowrap;
     text-shadow:0 0 3px #000, 0 0 4px #000, 0 0 4px #000;}
   .preplot-label.done{color:#4ade80;}
-  #speedLegend{position:absolute; top:12px; right:12px; z-index:800; display:none; gap:10px;
+  #speedLegend{position:absolute; top:12px; right:12px; z-index:800; display:none; gap:8px 10px; flex-wrap:wrap; max-width:210px;
     background:rgba(11,21,38,.85); border:1px solid #22344f; border-radius:8px; padding:6px 10px; font-size:.72rem; color:#eaf1fb;}
   #speedLegend b{display:inline-flex; align-items:center; gap:4px; font-weight:600;}
   #speedLegend i{width:11px; height:11px; border-radius:3px; display:inline-block;}
@@ -318,7 +318,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-12-22';
+const BUILD = '2026-08-12-23';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -440,7 +440,7 @@ let speedColorOn = false;
 // legend สีความเร็ว (โชว์เฉพาะตอนเปิดโหมดระบายสี)
 const spLegend = document.createElement('div');
 spLegend.id = 'speedLegend';
-spLegend.innerHTML = '<b><i style="background:#22c55e"></i>≤4.5</b><b><i style="background:#f59e0b"></i>4.5–5.5</b><b><i style="background:#ef4444"></i>&gt;5.5 kn</b>';
+spLegend.innerHTML = '<b><i style="background:#16a34a"></i>≤4.2</b><b><i style="background:#84cc16"></i>4.3–4.5</b><b><i style="background:#eab308"></i>4.6–4.8</b><b><i style="background:#f97316"></i>4.9–5.0</b><b><i style="background:#ea580c"></i>5.1–5.5</b><b><i style="background:#dc2626"></i>&gt;5.5 kn</b>';
 document.getElementById('map').appendChild(spLegend);
 
 // ---------- Streamer spread (mockup) ----------
@@ -601,12 +601,16 @@ else {
     }
     return false;
   }
-  function speedColor(sp) {
-    if (sp == null || isNaN(sp)) return '';
-    if (sp <= SPEED_LIMIT) return '#22c55e';
-    if (sp <= SPEED_WARN) return '#f59e0b';
-    return '#ef4444';
+  // 6 เฉดตามความเร็ว: เขียว(ช้า/ดี) → แดง(เร็ว/noise เยอะ)
+  function speedBand(sp) {
+    if (sp <= 4.2) return '#16a34a';   // เขียว
+    if (sp <= 4.5) return '#84cc16';   // เขียวอมเหลือง
+    if (sp <= 4.8) return '#eab308';   // เหลือง
+    if (sp <= 5.0) return '#f97316';   // ส้ม
+    if (sp <= 5.5) return '#ea580c';   // ส้มแดง
+    return '#dc2626';                  // แดง
   }
+  function speedColor(sp) { return (sp == null || isNaN(sp)) ? '' : speedBand(sp); }
 
   // รับ current ใหม่ → เก็บไว้ แล้วตัดสินใจ (GPS/AIS)
   function applyCurrent(p) {
@@ -763,10 +767,7 @@ else {
     return smoothOn ? smoothTrack(inGulf) : dropSpikes(inGulf);
   }
   function trackSpeedColor(sp) {
-    if (sp == null || isNaN(sp)) return '#3d9bff';   // ไม่มีข้อมูลความเร็ว = น้ำเงิน
-    if (sp <= SPEED_LIMIT) return '#22c55e';
-    if (sp <= SPEED_WARN) return '#f59e0b';
-    return '#ef4444';
+    return (sp == null || isNaN(sp)) ? '#3d9bff' : speedBand(sp);   // ไม่มีข้อมูล = น้ำเงิน
   }
   function renderTrack() {
     const src = cleanPts();
