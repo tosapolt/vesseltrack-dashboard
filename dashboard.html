@@ -134,6 +134,10 @@
     font-size:11px; font-weight:700; text-align:center; white-space:nowrap;
     text-shadow:0 0 3px #000, 0 0 4px #000, 0 0 4px #000;}
   .preplot-label.done{color:#4ade80;}
+  #speedLegend{position:absolute; top:12px; right:12px; z-index:800; display:none; gap:10px;
+    background:rgba(11,21,38,.85); border:1px solid #22344f; border-radius:8px; padding:6px 10px; font-size:.72rem; color:#eaf1fb;}
+  #speedLegend b{display:inline-flex; align-items:center; gap:4px; font-weight:600;}
+  #speedLegend i{width:11px; height:11px; border-radius:3px; display:inline-block;}
   /* ---- Acquired lines modal ---- */
   #linesModal{position:fixed; inset:0; z-index:4000; background:rgba(3,10,22,.82); display:none; align-items:center; justify-content:center; padding:20px;}
   #linesModal .lm-card{background:#0e1c33; border:1px solid #22344f; border-radius:14px; width:min(660px,96vw); max-height:88vh; overflow:auto; padding:18px 20px; color:#eaf1fb;}
@@ -172,6 +176,7 @@
   <button id="btnStr" class="active">🎣 Streamers</button>
   <button id="btnFit">🧭 Fit track</button>
   <button id="btnMeasure">📏 Measure</button>
+  <button id="btnSpeedTrack" title="ระบายสีเส้น track ตามความเร็ว (รีวิว noise ย้อนหลัง)">🎨 Speed</button>
   <button id="btnBanner" class="active">🖼 Banner</button>
   <button id="btnLines" title="ไฮไลต์เส้นที่ยิงเสร็จ (Acquired)">✅ Lines</button>
   <div class="dropdown" id="polyDrop">
@@ -313,7 +318,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-12-21';
+const BUILD = '2026-08-12-22';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -430,6 +435,13 @@ function boatIcon(headingDeg) {
 
 let marker = null, follow = true;
 const trackLine = L.polyline([], { color: '#3d9bff', weight: 3, opacity: .85 }).addTo(map);
+const speedTrackLayer = L.layerGroup().addTo(map);   // เส้น track ระบายสีตามความเร็ว
+let speedColorOn = false;
+// legend สีความเร็ว (โชว์เฉพาะตอนเปิดโหมดระบายสี)
+const spLegend = document.createElement('div');
+spLegend.id = 'speedLegend';
+spLegend.innerHTML = '<b><i style="background:#22c55e"></i>≤4.5</b><b><i style="background:#f59e0b"></i>4.5–5.5</b><b><i style="background:#ef4444"></i>&gt;5.5 kn</b>';
+document.getElementById('map').appendChild(spLegend);
 
 // ---------- Streamer spread (mockup) ----------
 const streamerLayer = L.layerGroup().addTo(map);
@@ -750,10 +762,38 @@ else {
     const inGulf = loadedPts.filter(p => p && p.lat >= 4 && p.lat <= 15 && p.lon >= 96 && p.lon <= 106);
     return smoothOn ? smoothTrack(inGulf) : dropSpikes(inGulf);
   }
+  function trackSpeedColor(sp) {
+    if (sp == null || isNaN(sp)) return '#3d9bff';   // ไม่มีข้อมูลความเร็ว = น้ำเงิน
+    if (sp <= SPEED_LIMIT) return '#22c55e';
+    if (sp <= SPEED_WARN) return '#f59e0b';
+    return '#ef4444';
+  }
   function renderTrack() {
     const src = cleanPts();
-    trackLine.setLatLngs(src.map(p => [p.lat, p.lon]));
+    trackLine.setLatLngs(src.map(p => [p.lat, p.lon]));   // เก็บไว้เสมอ (ใช้ fit bounds)
+    speedTrackLayer.clearLayers();
+    if (!speedColorOn) { trackLine.setStyle({ opacity: .85 }); return; }
+    // โหมดระบายสีตามความเร็ว: ซ่อนเส้นน้ำเงิน แล้ววาด segment สีตามความเร็ว
+    trackLine.setStyle({ opacity: 0 });
+    if (src.length < 2) return;
+    let seg = [[src[0].lat, src[0].lon]];
+    let segColor = trackSpeedColor(src[1].sp);
+    for (let i = 1; i < src.length; i++) {
+      seg.push([src[i].lat, src[i].lon]);
+      const c = trackSpeedColor(src[i].sp);
+      if (c !== segColor) {
+        L.polyline(seg, { color: segColor, weight: 4, opacity: .9 }).addTo(speedTrackLayer);
+        seg = [[src[i].lat, src[i].lon]]; segColor = c;
+      }
+    }
+    if (seg.length > 1) L.polyline(seg, { color: segColor, weight: 4, opacity: .9 }).addTo(speedTrackLayer);
   }
+  $('btnSpeedTrack').onclick = () => {
+    speedColorOn = !speedColorOn;
+    $('btnSpeedTrack').classList.toggle('active', speedColorOn);
+    spLegend.style.display = speedColorOn ? 'flex' : 'none';
+    renderTrack();
+  };
 
   // ---------- โหลดเส้นทางแบบช่วงวันที่ (from → to) ----------
   function loadRange(fromStr, toStr) {
