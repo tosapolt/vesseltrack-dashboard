@@ -180,6 +180,7 @@
   <button id="btnFit">🧭 Fit track</button>
   <button id="btnMeasure">📏 Measure</button>
   <button id="btnSpeedTrack" title="โหมดดูความเร็ว: ซ่อนทุกอย่าง เหลือแต่เส้นทางเรือระบายสีความเร็ว">🎨 Speed</button>
+  <button id="btnTrack" title="แสดง/ซ่อน เส้นเส้นทางเดินเรือ (vessel track)">🧵 Track</button>
   <button id="btnBanner" class="active">🖼 Banner</button>
   <button id="btnLines" title="ไฮไลต์เส้นที่ยิงเสร็จ (Acquired)">✅ Lines</button>
   <div class="dropdown" id="polyDrop">
@@ -334,7 +335,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-12-29';
+const BUILD = '2026-08-13-30';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -503,6 +504,7 @@ let marker = null, follow = true;
 const trackLine = L.polyline([], { color: '#3d9bff', weight: 3, opacity: .85 }).addTo(map);
 const speedTrackLayer = L.layerGroup().addTo(map);   // เส้น track ระบายสีตามความเร็ว
 let speedColorOn = false;
+let trackOn = false;   // default = ซ่อน vessel track (กดปุ่ม 🧵 Track เพื่อแสดง)
 // legend สีความเร็ว (โชว์เฉพาะตอนเปิดโหมดระบายสี)
 const spLegend = document.createElement('div');
 spLegend.id = 'speedLegend';
@@ -842,6 +844,7 @@ else {
     const src = cleanPts();
     trackLine.setLatLngs(src.map(p => [p.lat, p.lon]));   // เก็บไว้เสมอ (ใช้ fit bounds)
     speedTrackLayer.clearLayers();
+    if (!trackOn) { trackLine.setStyle({ opacity: 0 }); return; }   // ปิด vessel track
     if (!speedColorOn) { trackLine.setStyle({ opacity: .85 }); return; }
     // โหมดระบายสีตามความเร็ว: ซ่อนเส้นน้ำเงิน แล้ววาด segment สีตามความเร็ว
     trackLine.setStyle({ opacity: 0 });
@@ -881,6 +884,11 @@ else {
       if (lastCurLL) drawStreamers(lastCurLL.lat, lastCurLL.lon, lastCurLL.hd);   // คืน streamer
     }
     renderBadRanges();   // ซ่อน/คืน red band ตามโหมด
+    renderTrack();
+  };
+  $('btnTrack').onclick = () => {
+    trackOn = !trackOn;
+    $('btnTrack').classList.toggle('active', trackOn);
     renderTrack();
   };
 
