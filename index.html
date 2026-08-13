@@ -150,6 +150,13 @@
   #mapLegend .ml-body i{width:18px; height:4px; border-radius:2px; display:inline-block; flex:none;}
   #mapLegend .ml-note{color:#9fb2cc; font-size:.66rem; margin-top:3px;}
   @media (max-width:640px){ #mapLegend{font-size:.68rem;} }
+  /* ---- Mobile: banner เต็มจอเวลาเปิด (default ซ่อน), header กะทัดรัด ---- */
+  @media (max-width:700px){
+    #opBanner{width:100vw; border-left:none;}
+    header{gap:7px; padding:8px 10px;}
+    header button{padding:7px 10px; font-size:.82rem;}
+    #mapLegend{max-width:62vw;}
+  }
   /* ---- Acquired lines modal ---- */
   #linesModal{position:fixed; inset:0; z-index:4000; background:rgba(3,10,22,.82); display:none; align-items:center; justify-content:center; padding:20px;}
   #linesModal .lm-card{background:#0e1c33; border:1px solid #22344f; border-radius:14px; width:min(660px,96vw); max-height:88vh; overflow:auto; padding:18px 20px; color:#eaf1fb;}
@@ -351,7 +358,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-33';
+const BUILD = '2026-08-13-34';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -546,6 +553,8 @@ document.getElementById('mlHd').onclick = () => {
   b.style.display = open ? 'none' : 'block';
   document.getElementById('mlTgl').textContent = open ? '▸' : '▾';
 };
+// มือถือ: ย่อ legend เก็บไว้ก่อน (กันบังแผนที่) — กดหัวเพื่อกาง
+if (window.innerWidth <= 700) { document.getElementById('mlBody').style.display = 'none'; document.getElementById('mlTgl').textContent = '▸'; }
 
 // ---------- Streamer spread (mockup) ----------
 const streamerLayer = L.layerGroup().addTo(map);
@@ -1465,8 +1474,10 @@ ${coords}
 
   // ---------- ปุ่มปิด/เปิด banner ----------
   const showBtn = el('opShow'), closeBtn = el('opClose');
-  if (closeBtn) closeBtn.onclick = () => { bar.classList.add('hidden'); if (showBtn) showBtn.style.display = 'block'; };
-  if (showBtn)  showBtn.onclick  = () => { bar.classList.remove('hidden'); showBtn.style.display = 'none'; };
+  function bannerShow() { bar.classList.remove('hidden'); if (showBtn) showBtn.style.display = 'none'; const b = el('btnBanner'); if (b) b.classList.add('active'); place(); start(); }
+  function bannerHide() { bar.classList.add('hidden'); if (showBtn) showBtn.style.display = 'block'; const b = el('btnBanner'); if (b) b.classList.remove('active'); stop(); }
+  if (closeBtn) closeBtn.onclick = bannerHide;
+  if (showBtn)  showBtn.onclick  = bannerShow;
 
   // เชื่อม Firebase (ถ้า main script init ไว้แล้ว) — ถ้าไม่ได้ ใช้รูป default อย่างเดียว
   let bannerRef = null, metaRef = null;
@@ -1673,11 +1684,10 @@ ${coords}
 
   // ปุ่ม toggle เปิด/ปิด banner ใน header
   const btn = el('btnBanner');
-  if (btn) btn.onclick = () => {
-    const hidden = bar.classList.toggle('hidden');
-    btn.classList.toggle('active', !hidden);
-    hidden ? stop() : (place(), start());
-  };
+  if (btn) btn.onclick = () => { bar.classList.contains('hidden') ? bannerShow() : bannerHide(); };
+
+  // มือถือ: ซ่อน banner เป็น default (แผนที่เต็มจอ) — กด 🖼 Banner เปิดดูเต็มจอเมื่อต้องการ
+  if (window.innerWidth <= 700) bannerHide();
 })();
 </script>
 </body>
