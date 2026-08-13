@@ -351,7 +351,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-32';
+const BUILD = '2026-08-13-33';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -1524,6 +1524,12 @@ ${coords}
   function userGo(n) { if (!imgs.length) return; idx = (n + imgs.length) % imgs.length; start(); }
   el('opPrev').onclick = () => userGo(idx - 1);
   el('opNext').onclick = () => userGo(idx + 1);
+  // แตะที่รูปเลย: ครึ่งซ้าย = ถอย, ครึ่งขวา = ไปรูปถัดไป (ไม่โดนปุ่ม/จุด/หัวข้อ)
+  bar.addEventListener('click', e => {
+    if (e.target.tagName !== 'IMG' && !e.target.classList.contains('veil')) return;
+    const r = bar.getBoundingClientRect();
+    userGo(idx + ((e.clientX - r.left) < r.width / 2 ? -1 : 1));
+  });
   // ปัดซ้าย/ขวาบนมือถือ
   let swX = null;
   bar.addEventListener('touchstart', e => { swX = e.changedTouches[0].clientX; }, { passive: true });
