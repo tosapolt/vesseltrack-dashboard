@@ -275,6 +275,7 @@
 <div class="stats">
   <div class="tile"><div class="lbl">Speed</div><div class="val" id="sSpd">– <span class="unit">knots</span></div></div>
   <div class="tile"><div class="lbl">Heading</div><div class="val" id="sHdg">– <span class="unit">°</span></div></div>
+  <div class="tile"><div class="lbl">Line · SP (approx)</div><div class="val" id="sSP">–</div></div>
   <div class="tile"><div class="lbl">Latitude</div><div class="val" id="sLat">–</div></div>
   <div class="tile"><div class="lbl">Longitude</div><div class="val" id="sLon">–</div></div>
   <div class="tile"><div class="lbl">Last update</div><div class="val" id="sAgo">–</div></div>
@@ -318,7 +319,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-12-26';
+const BUILD = '2026-08-12-27';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -385,6 +386,28 @@ PREPLOT.forEach(l => {
 });
 let preOn = true;
 preLayer.addTo(map);
+
+// ---------- SP (shot point) locating — จาก daily report ----------
+const SP_INTERVAL_M = 12.5;   // 1 SP ต่อ 12.5 ม. (triple source: 37.5m pop-to-pop = 3 pop)
+const SP_FIRST = 1001;        // SP แรก อยู่ปลายด้านใต้ (c0) เพิ่มขึ้นไปทางเหนือ (c1)
+// หา line ที่ใกล้สุด + SP โดยประมาณของจุดนั้น
+function spInfo(lat, lon) {
+  if (typeof PREPLOT === 'undefined' || !PREPLOT.length) return null;
+  const mE = Math.cos(lat * Math.PI / 180) * 111320, mN = 110540;
+  let best = null, bestD = Infinity;
+  PREPLOT.forEach(L => {
+    const Ax = (L.c[0][1] - lon) * mE, Ay = (L.c[0][0] - lat) * mN;   // ปลายใต้ เทียบจุด
+    const Zx = (L.c[1][1] - lon) * mE, Zy = (L.c[1][0] - lat) * mN;   // ปลายเหนือ
+    const Dx = Zx - Ax, Dy = Zy - Ay, len2 = Dx * Dx + Dy * Dy;
+    if (len2 < 1) return;
+    let t = -(Ax * Dx + Ay * Dy) / len2; t = Math.max(0, Math.min(1, t));
+    const Px = Ax + t * Dx, Py = Ay + t * Dy, dist = Math.hypot(Px, Py);
+    if (dist < bestD) { bestD = dist; best = { t, len: Math.sqrt(len2), name: L.n }; }
+  });
+  if (!best) return null;
+  const sp = SP_FIRST + Math.round((best.t * best.len) / SP_INTERVAL_M);   // ระยะจากปลายใต้ / 12.5
+  return { line: best.name, sp, offM: Math.round(bestD) };
+}
 
 function isLineDone(n) { return !!doneLinesSet[String(n)]; }
 function restyleLine(n) {
@@ -674,7 +697,10 @@ else {
     drawStreamers(p.lat, p.lon, hdg);
     updateMini(p.lat, p.lon);
     lastCurLL = { lat: p.lat, lon: p.lon, hd: hdg };
-    marker.bindPopup(`<b>${VESSEL_ID}</b><br>${fmt(p.lat,5)}, ${fmt(p.lon,5)}<br>Speed ${fmt(p.sp,1)} kn · Heading ${fmt(p.hd,0)}°<br>${new Date(p.t).toLocaleString('en-GB')}`);
+    const sp = spInfo(p.lat, p.lon);
+    const spTxt = (sp && sp.offM < 3000) ? ('Line ' + sp.line + ' · SP ~' + sp.sp) : '';
+    marker.bindPopup(`<b>${VESSEL_ID}</b><br>${fmt(p.lat,5)}, ${fmt(p.lon,5)}<br>Speed ${fmt(p.sp,1)} kn · Heading ${fmt(p.hd,0)}°${spTxt ? '<br>' + spTxt : ''}<br>${new Date(p.t).toLocaleString('en-GB')}`);
+    $('sSP').innerHTML = spTxt ? (sp.line + ' · <b>SP ' + sp.sp + '</b>') : '–';
     if (follow) map.panTo(ll);
 
     $('sSpd').innerHTML = fmt(p.sp,1) + ' <span class="unit">knots</span>';
