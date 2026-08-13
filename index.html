@@ -197,16 +197,28 @@
 <div id="linesModal">
   <div class="lm-card">
     <h3>✅ Acquired lines <span class="lm-count" id="lmCount"></span></h3>
-    <div class="lm-sub">แตะเลข line ที่ยิงเสร็จ → เส้นบนแผนที่จะเป็นสีเขียว ซิงค์ให้ทุกคนเห็น (ใส่ PIN ครั้งแรก) · หรือคลิกเส้นบนแผนที่ก็ได้</div>
+    <div class="lm-sub">Tap a line number that is fully acquired → the line turns <b style="color:#4ade80">GREEN</b> on the map (synced to everyone · PIN required first time). You can also click the line on the map.</div>
     <div class="lm-row">
-      <input type="text" id="lmInput" placeholder="พิมพ์เลข line เช่น 1936, 1960  หรือช่วง 1984-2032">
-      <button id="lmMark">✓ ทำเป็นเสร็จ</button>
-      <button id="lmUnmark">↺ ยกเลิก</button>
+      <input type="text" id="lmInput" placeholder="Line numbers, e.g.  1936, 1960  or range 1984-2032">
+      <button id="lmMark">✓ Mark acquired</button>
+      <button id="lmUnmark">↺ Undo</button>
     </div>
     <div class="lm-grid" id="lmGrid"></div>
-    <div class="lm-row" style="margin-top:16px; justify-content:space-between;">
-      <button id="lmClear" style="border-color:rgba(231,76,60,.6);">🗑 ล้างทั้งหมด</button>
-      <button id="lmClose">ปิด</button>
+
+    <div style="margin-top:20px; border-top:1px solid #22344f; padding-top:14px;">
+      <h3 style="font-size:1.0rem; margin:0 0 4px;">🚫 No-data ranges <span class="lm-count" id="lmBadCount" style="color:#f87171"></span></h3>
+      <div class="lm-sub">Enter shot-point (SP) ranges that have <b style="color:#f87171">NO usable data</b> (airgun / equipment down). These show as a <b style="color:#f87171">RED</b> band over the line = must re-shoot / infill.</div>
+      <div class="lm-row">
+        <input type="text" id="lmBadInput" placeholder="line: SP-from - SP-to,  e.g.  1840: 2000-2300, 2500-2600">
+        <button id="lmBadMark" style="border-color:rgba(239,68,68,.7)">🚫 Mark no-data (red)</button>
+        <button id="lmBadClear">Clear this line</button>
+      </div>
+      <div class="lm-sub" id="lmBadList" style="margin-bottom:0"></div>
+    </div>
+
+    <div class="lm-row" style="margin-top:18px; justify-content:space-between;">
+      <button id="lmClear" style="border-color:rgba(231,76,60,.6);">🗑 Clear all acquired</button>
+      <button id="lmClose">Close</button>
     </div>
   </div>
 </div>
@@ -319,7 +331,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-12-27';
+const BUILD = '2026-08-12-28';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -407,6 +419,33 @@ function spInfo(lat, lon) {
   if (!best) return null;
   const sp = SP_FIRST + Math.round((best.t * best.len) / SP_INTERVAL_M);   // ระยะจากปลายใต้ / 12.5
   return { line: best.name, sp, offM: Math.round(bestD) };
+}
+
+// ---------- No-data (bad) SP ranges → red band over the line ----------
+const badLayer = L.layerGroup().addTo(map);
+let badRangesSet = {};          // { "1840": ["2000-2300","2500-2600"], ... }
+function lineLenM(a, z) {
+  const mE = Math.cos((a[0] + z[0]) / 2 * Math.PI / 180) * 111320, mN = 110540;
+  return Math.hypot((z[1] - a[1]) * mE, (z[0] - a[0]) * mN);
+}
+function renderBadRanges() {
+  badLayer.clearLayers();
+  if (!preOn || speedColorOn) return;   // ซ่อนตอนปิด pre-plot หรืออยู่โหมด Speed
+  Object.keys(badRangesSet).forEach(n => {
+    const line = PREPLOT.find(l => l.n === n); if (!line) return;
+    const a = line.c[0], z = line.c[1], lenM = lineLenM(a, z);
+    let ranges = badRangesSet[n]; if (!ranges) return;
+    if (!Array.isArray(ranges)) ranges = Object.values(ranges);
+    ranges.forEach(r => {
+      const mm = String(r).match(/(\d+)\s*-\s*(\d+)/); if (!mm) return;
+      const lo = Math.min(+mm[1], +mm[2]), hi = Math.max(+mm[1], +mm[2]);
+      let f0 = (lo - SP_FIRST) * SP_INTERVAL_M / lenM, f1 = (hi - SP_FIRST) * SP_INTERVAL_M / lenM;
+      f0 = Math.max(0, Math.min(1, f0)); f1 = Math.max(0, Math.min(1, f1));
+      const p0 = [a[0] + (z[0] - a[0]) * f0, a[1] + (z[1] - a[1]) * f0];
+      const p1 = [a[0] + (z[0] - a[0]) * f1, a[1] + (z[1] - a[1]) * f1];
+      L.polyline([p0, p1], { color: '#ef4444', weight: 6, opacity: .95 }).addTo(badLayer);
+    });
+  });
 }
 
 function isLineDone(n) { return !!doneLinesSet[String(n)]; }
@@ -553,7 +592,7 @@ $('btnStr').onclick = () => {
 $('btnFit').onclick = () => { follow = false; const pts = trackLine.getLatLngs(); if (pts.length > 1) map.fitBounds(trackLine.getBounds(), { padding: [40, 40] }); };
 seaLayer.addTo(map);   // seamarks เปิดตลอด (เอาปุ่ม toggle ออกแล้ว)
 // Pre-plot toggle ย้ายมาอยู่ในเมนู Polygons แล้ว
-$('prePlotChk').onchange = (e) => { preOn = e.target.checked; preOn ? preLayer.addTo(map) : map.removeLayer(preLayer); refreshPreLabels(); };
+$('prePlotChk').onchange = (e) => { preOn = e.target.checked; preOn ? preLayer.addTo(map) : map.removeLayer(preLayer); refreshPreLabels(); renderBadRanges(); };
 map.on('dragstart', () => { follow = false; });
 
 // ---------- Measure tool (วัดระยะบนแผนที่) ----------
@@ -838,6 +877,7 @@ else {
       restyleAllLines();               // คืนสีเส้น line ที่เสร็จ + label
       if (lastCurLL) drawStreamers(lastCurLL.lat, lastCurLL.lon, lastCurLL.hd);   // คืน streamer
     }
+    renderBadRanges();   // ซ่อน/คืน red band ตามโหมด
     renderTrack();
   };
 
@@ -1257,11 +1297,12 @@ ${coords}
   const doneRef = base.child('doneLines');
   function linesEnsurePin() {
     if (linesPinOK) return true;
-    const v = prompt('ใส่ PIN เพื่ออัปเดตสถานะเส้นที่ยิงเสร็จ:');
+    const v = prompt('Enter PIN to update line status:');
     if (v === null) return false;
     if (v === LINES_PIN) { linesPinOK = true; return true; }
-    alert('PIN ไม่ถูกต้อง'); return false;
+    alert('Incorrect PIN'); return false;
   }
+  const badRef = base.child('lineBad');
   function setLineDone(n, done) { n = String(n); if (done) doneRef.child(n).set(true); else doneRef.child(n).remove(); }
   function toggleLineDone(n) { if (!linesEnsurePin()) return; setLineDone(n, !isLineDone(n)); }
   // แปลงข้อความเป็นรายการเลข line จริง (รองรับ comma และช่วง 1984-2032)
@@ -1289,18 +1330,52 @@ ${coords}
   }
   function updateLinesCount() {
     const done = PREPLOT.filter(l => isLineDone(l.n)).length;
-    const c = $('lmCount'); if (c) c.textContent = done + ' / ' + PREPLOT.length + ' เสร็จ';
+    const c = $('lmCount'); if (c) c.textContent = done + ' / ' + PREPLOT.length + ' done';
   }
-  // ซิงค์จาก Firebase → ทาสีเส้น + อัปเดต UI
+  // ---------- no-data (bad) ranges ----------
+  function badListForLine(n) {
+    let r = badRangesSet[n]; if (!r) return [];
+    if (!Array.isArray(r)) r = Object.values(r);
+    return r.map(x => String(x));
+  }
+  function updateBadCount() {
+    const lines = Object.keys(badRangesSet).filter(n => badListForLine(n).length);
+    const total = lines.reduce((s, n) => s + badListForLine(n).length, 0);
+    const c = $('lmBadCount'); if (c) c.textContent = total ? (total + ' range' + (total > 1 ? 's' : '') + ' · ' + lines.length + ' line' + (lines.length > 1 ? 's' : '')) : '';
+    const list = $('lmBadList');
+    if (list) list.innerHTML = lines.length
+      ? 'Current: ' + lines.sort().map(n => '<b style="color:#f87171">' + n + '</b>: ' + badListForLine(n).join(', ')).join(' &nbsp;·&nbsp; ')
+      : '';
+  }
+  // sync from Firebase → recolor + update UI
   doneRef.on('value', snap => { doneLinesSet = snap.val() || {}; restyleAllLines(); renderLinesGrid(); updateLinesCount(); });
-  // คลิกเส้นบนแผนที่เพื่อสลับสถานะ
+  badRef.on('value', snap => { badRangesSet = snap.val() || {}; renderBadRanges(); updateBadCount(); });
+  // click a line on the map to toggle acquired
   PREPLOT.forEach(l => { const pl = preLinePolys[l.n]; if (pl) pl.on('click', () => toggleLineDone(l.n)); });
-  // ปุ่ม/โมดัล
-  $('btnLines').onclick = () => { renderLinesGrid(); updateLinesCount(); $('linesModal').style.display = 'flex'; };
+  // buttons / modal
+  $('btnLines').onclick = () => { renderLinesGrid(); updateLinesCount(); updateBadCount(); $('linesModal').style.display = 'flex'; };
   $('lmClose').onclick = () => { $('linesModal').style.display = 'none'; };
   $('lmMark').onclick = () => { if (!linesEnsurePin()) return; parseLineList($('lmInput').value).forEach(n => setLineDone(n, true)); $('lmInput').value = ''; };
   $('lmUnmark').onclick = () => { if (!linesEnsurePin()) return; parseLineList($('lmInput').value).forEach(n => setLineDone(n, false)); $('lmInput').value = ''; };
-  $('lmClear').onclick = () => { if (!linesEnsurePin()) return; if (confirm('ล้างสถานะ "เส้นที่ยิงเสร็จ" ทั้งหมดสำหรับทุกคน?')) doneRef.remove(); };
+  $('lmClear').onclick = () => { if (!linesEnsurePin()) return; if (confirm('Clear ALL acquired-line status for everyone?')) doneRef.remove(); };
+  // no-data range: "1840: 2000-2300, 2500-2600"  (empty ranges = clear that line)
+  $('lmBadMark').onclick = () => {
+    if (!linesEnsurePin()) return;
+    const m = $('lmBadInput').value.trim().match(/^(\d+)\s*:\s*(.*)$/);
+    if (!m) { alert('Format:  line: SP-from - SP-to   e.g.  1840: 2000-2300'); return; }
+    const line = m[1];
+    if (!PREPLOT.find(l => l.n === line)) { alert('Line ' + line + ' not found'); return; }
+    const ranges = m[2].split(',').map(s => s.trim().replace(/\s+/g, '')).filter(s => /^\d+-\d+$/.test(s));
+    if (!ranges.length) { badRef.child(line).remove(); }   // no valid range → clear line
+    else badRef.child(line).set(ranges);
+    $('lmBadInput').value = '';
+  };
+  $('lmBadClear').onclick = () => {
+    if (!linesEnsurePin()) return;
+    const m = $('lmBadInput').value.trim().match(/^(\d+)/);
+    if (m) { badRef.child(m[1]).remove(); $('lmBadInput').value = ''; }
+    else alert('Type the line number first, then Clear this line');
+  };
 }
 </script>
 
