@@ -138,6 +138,14 @@
     background:rgba(11,21,38,.85); border:1px solid #22344f; border-radius:8px; padding:6px 10px; font-size:.72rem; color:#eaf1fb;}
   #speedLegend b{display:inline-flex; align-items:center; gap:4px; font-weight:600;}
   #speedLegend i{width:11px; height:11px; border-radius:3px; display:inline-block;}
+  /* ---- Map legend (line colours) ---- */
+  #mapLegend{position:absolute; top:96px; left:10px; z-index:800; background:rgba(11,21,38,.86); border:1px solid #22344f; border-radius:8px; color:#eaf1fb; font-size:.72rem; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.4);}
+  #mapLegend .ml-hd{padding:5px 10px; cursor:pointer; font-weight:700; user-select:none; display:flex; justify-content:space-between; gap:12px;}
+  #mapLegend .ml-body{padding:2px 10px 7px;}
+  #mapLegend .ml-body div{display:flex; align-items:center; gap:8px; padding:2px 0; white-space:nowrap;}
+  #mapLegend .ml-body i{width:18px; height:4px; border-radius:2px; display:inline-block; flex:none;}
+  #mapLegend .ml-note{color:#9fb2cc; font-size:.66rem; margin-top:3px;}
+  @media (max-width:640px){ #mapLegend{font-size:.68rem;} }
   /* ---- Acquired lines modal ---- */
   #linesModal{position:fixed; inset:0; z-index:4000; background:rgba(3,10,22,.82); display:none; align-items:center; justify-content:center; padding:20px;}
   #linesModal .lm-card{background:#0e1c33; border:1px solid #22344f; border-radius:14px; width:min(660px,96vw); max-height:88vh; overflow:auto; padding:18px 20px; color:#eaf1fb;}
@@ -335,7 +343,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-30';
+const BUILD = '2026-08-13-31';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -510,6 +518,26 @@ const spLegend = document.createElement('div');
 spLegend.id = 'speedLegend';
 spLegend.innerHTML = '<b><i style="background:#16a34a"></i>≤4.2</b><b><i style="background:#84cc16"></i>4.3–4.5</b><b><i style="background:#eab308"></i>4.6–4.8</b><b><i style="background:#f97316"></i>4.9–5.0</b><b><i style="background:#ea580c"></i>5.1–5.5</b><b><i style="background:#dc2626"></i>&gt;5.5 kn</b>';
 document.getElementById('map').appendChild(spLegend);
+
+// legend อธิบายสีเส้นบนแผนที่ (กดหัวเพื่อย่อ/ขยาย)
+const mapLegend = document.createElement('div');
+mapLegend.id = 'mapLegend';
+mapLegend.innerHTML =
+  '<div class="ml-hd" id="mlHd"><span>🗺 Legend</span><span id="mlTgl">▾</span></div>' +
+  '<div class="ml-body" id="mlBody">' +
+  '<div><i style="background:#808080"></i>Pre-plot line (planned)</div>' +
+  '<div><i style="background:#22c55e"></i>Acquired (done)</div>' +
+  '<div><i style="background:#ef4444"></i>No data — re-shoot</div>' +
+  '<div><i style="background:#22d3ee"></i>Streamers</div>' +
+  '<div><i style="background:#3d9bff"></i>Vessel track</div>' +
+  '<div class="ml-note">Boundaries / polygons: colour per KMZ file</div>' +
+  '</div>';
+document.getElementById('map').appendChild(mapLegend);
+document.getElementById('mlHd').onclick = () => {
+  const b = document.getElementById('mlBody'), open = b.style.display !== 'none';
+  b.style.display = open ? 'none' : 'block';
+  document.getElementById('mlTgl').textContent = open ? '▸' : '▾';
+};
 
 // ---------- Streamer spread (mockup) ----------
 const streamerLayer = L.layerGroup().addTo(map);
