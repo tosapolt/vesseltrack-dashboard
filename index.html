@@ -151,6 +151,9 @@
   #linesModal .line-chip{background:#152036; border:1px solid #2b3d59; color:#c8d6ec; border-radius:7px; padding:7px 10px; font-size:.82rem; font-weight:600; cursor:pointer; font-variant-numeric:tabular-nums;}
   #linesModal .line-chip.done{background:#16a34a; border-color:#22c55e; color:#eafff2;}
   #linesModal .lm-count{font-weight:800; color:#4ade80; font-size:.95rem;}
+  #linesModal .bad-tag{display:inline-flex; align-items:center; gap:6px; background:#2a1416; border:1px solid rgba(239,68,68,.55); color:#fca5a5; border-radius:7px; padding:5px 9px; margin:0 6px 6px 0; font-size:.82rem; font-variant-numeric:tabular-nums;}
+  #linesModal .bad-x{background:transparent; border:none; color:#f87171; cursor:pointer; font-weight:800; font-size:.9rem; padding:0 2px; line-height:1;}
+  #linesModal .bad-x:hover{color:#fff;}
   /* tooltip เครื่องมือวัดระยะ */
   .measure-tip{background:#f1c40f; color:#20160a; border:1px solid #b8860b; border-radius:6px;
     font-weight:700; font-size:.74rem; line-height:1.35; box-shadow:0 1px 5px rgba(0,0,0,.45); padding:4px 8px;}
@@ -211,7 +214,7 @@
       <div class="lm-row">
         <input type="text" id="lmBadInput" placeholder="line: SP-from - SP-to,  e.g.  1840: 2000-2300, 2500-2600">
         <button id="lmBadMark" style="border-color:rgba(239,68,68,.7)">🚫 Mark no-data (red)</button>
-        <button id="lmBadClear">Clear this line</button>
+        <button id="lmBadClear" title="Type a line number to clear that line, or leave empty to clear ALL">Clear line / all</button>
       </div>
       <div class="lm-sub" id="lmBadList" style="margin-bottom:0"></div>
     </div>
@@ -331,7 +334,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-12-28';
+const BUILD = '2026-08-12-29';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -1339,13 +1342,28 @@ ${coords}
     return r.map(x => String(x));
   }
   function updateBadCount() {
-    const lines = Object.keys(badRangesSet).filter(n => badListForLine(n).length);
+    const lines = Object.keys(badRangesSet).filter(n => badListForLine(n).length).sort();
     const total = lines.reduce((s, n) => s + badListForLine(n).length, 0);
     const c = $('lmBadCount'); if (c) c.textContent = total ? (total + ' range' + (total > 1 ? 's' : '') + ' · ' + lines.length + ' line' + (lines.length > 1 ? 's' : '')) : '';
-    const list = $('lmBadList');
-    if (list) list.innerHTML = lines.length
-      ? 'Current: ' + lines.sort().map(n => '<b style="color:#f87171">' + n + '</b>: ' + badListForLine(n).join(', ')).join(' &nbsp;·&nbsp; ')
-      : '';
+    const list = $('lmBadList'); if (!list) return;
+    list.innerHTML = '';
+    if (!lines.length) return;
+    const hint = document.createElement('div');
+    hint.style.cssText = 'margin-bottom:6px;color:#9fb2cc';
+    hint.textContent = 'Tap text to edit · tap ✕ to remove the red on that line:';
+    list.appendChild(hint);
+    lines.forEach(n => {
+      const tag = document.createElement('span'); tag.className = 'bad-tag';
+      const txt = document.createElement('span');
+      txt.textContent = n + ': ' + badListForLine(n).join(', ');
+      txt.style.cursor = 'pointer'; txt.title = 'Click to load into the box and edit';
+      txt.onclick = () => { $('lmBadInput').value = n + ': ' + badListForLine(n).join(', '); $('lmBadInput').focus(); };
+      const x = document.createElement('button'); x.className = 'bad-x'; x.textContent = '✕';
+      x.title = 'Remove red band on line ' + n;
+      x.onclick = () => { if (!linesEnsurePin()) return; badRef.child(n).remove(); };
+      tag.appendChild(txt); tag.appendChild(x);
+      list.appendChild(tag);
+    });
   }
   // sync from Firebase → recolor + update UI
   doneRef.on('value', snap => { doneLinesSet = snap.val() || {}; restyleAllLines(); renderLinesGrid(); updateLinesCount(); });
@@ -1373,8 +1391,8 @@ ${coords}
   $('lmBadClear').onclick = () => {
     if (!linesEnsurePin()) return;
     const m = $('lmBadInput').value.trim().match(/^(\d+)/);
-    if (m) { badRef.child(m[1]).remove(); $('lmBadInput').value = ''; }
-    else alert('Type the line number first, then Clear this line');
+    if (m) { badRef.child(m[1]).remove(); $('lmBadInput').value = ''; }      // line number typed → clear that line
+    else if (confirm('Clear ALL no-data (red) ranges for everyone?')) badRef.remove();   // empty box → clear all
   };
 }
 </script>
