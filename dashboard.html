@@ -357,7 +357,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-38';
+const BUILD = '2026-08-13-39';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -530,7 +530,12 @@ let trackOn = true;   // default = แสดง vessel track (กดปุ่ม
 // legend สีความเร็ว (โชว์เฉพาะตอนเปิดโหมดระบายสี)
 const spLegend = document.createElement('div');
 spLegend.id = 'speedLegend';
-spLegend.innerHTML = '<b><i style="background:#16a34a"></i>≤4.2</b><b><i style="background:#84cc16"></i>4.3–4.5</b><b><i style="background:#eab308"></i>4.6–4.8</b><b><i style="background:#f97316"></i>4.9–5.0</b><b><i style="background:#ea580c"></i>5.1–5.5</b><b><i style="background:#dc2626"></i>&gt;5.5 kn</b>';
+spLegend.innerHTML =
+  '<div style="width:186px;">' +
+  '<div style="font-weight:700;margin-bottom:4px;">Speed (knots)</div>' +
+  '<div style="height:11px;border-radius:6px;background:linear-gradient(90deg,hsl(240,85%,50%),hsl(180,85%,50%),hsl(120,85%,50%),hsl(60,85%,50%),hsl(0,85%,50%));"></div>' +
+  '<div style="display:flex;justify-content:space-between;margin-top:3px;"><span>≤4.0</span><span>4.75</span><span>≥5.5</span></div>' +
+  '</div>';
 document.getElementById('map').appendChild(spLegend);
 
 // legend อธิบายสีเส้นบนแผนที่ (กดหัวเพื่อย่อ/ขยาย)
@@ -714,13 +719,13 @@ else {
     return false;
   }
   // 6 เฉดตามความเร็ว: เขียว(ช้า/ดี) → แดง(เร็ว/noise เยอะ)
+  // rainbow ต่อเนื่อง: 4.0 นอต = น้ำเงิน (ช้า/ดี) → 5.5 นอต = แดง (เร็ว/noise เยอะ)
+  const SPD_LO = 4.0, SPD_HI = 5.5;
   function speedBand(sp) {
-    if (sp <= 4.2) return '#16a34a';   // เขียว
-    if (sp <= 4.5) return '#84cc16';   // เขียวอมเหลือง
-    if (sp <= 4.8) return '#eab308';   // เหลือง
-    if (sp <= 5.0) return '#f97316';   // ส้ม
-    if (sp <= 5.5) return '#ea580c';   // ส้มแดง
-    return '#dc2626';                  // แดง
+    let t = (sp - SPD_LO) / (SPD_HI - SPD_LO);
+    t = Math.max(0, Math.min(1, t));
+    const hue = 240 * (1 - t);         // 240=น้ำเงิน → 180 ฟ้า → 120 เขียว → 60 เหลือง → 0 แดง
+    return 'hsl(' + Math.round(hue) + ',85%,50%)';
   }
   function speedColor(sp) { return (sp == null || isNaN(sp)) ? '' : speedBand(sp); }
   // ความเร็ว: ใช้ค่าจากเครื่องถ้ามี ไม่งั้นคำนวณจากระยะ/เวลา (iPhone Safari มักคืน 0/null)
