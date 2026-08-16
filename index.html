@@ -346,7 +346,7 @@ const firebaseConfig = {
 };
 
 const VESSEL_ID    = new URLSearchParams(location.search).get('id') || "seismic-1"; // ?id=test-1 = ดูเรือทดสอบ
-const TRACK_POINTS = 1000;        // จำนวนจุดเส้นทางย้อนหลังที่ดึงมาแสดง (แบบวันเดียว)
+const TRACK_POINTS = 8000;        // จำนวนจุดต่อวัน (เผื่อมือถือส่งทุก 15 วิ ~5,760 จุด/วัน → เส้นถึงเที่ยงคืนครบทั้งวัน)
 const RANGE_POINTS = 8000;        // จำนวนจุดสูงสุดเมื่อดูแบบช่วงหลายวัน
 const STALE_SEC    = 300;         // เกินกี่วินาทีถือว่า feed ขาด (ไม่มีข้อมูลเข้าเลย)
 const STALE_MOVE_SEC = 900;       // ตำแหน่งไม่ขยับเกินกี่วินาที (ทั้งที่ feed ยังมา) = AIS ค้าง/สัญญาณหาย (15 นาที)
@@ -357,7 +357,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-36';
+const BUILD = '2026-08-13-38';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -723,6 +723,25 @@ else {
     return '#dc2626';                  // แดง
   }
   function speedColor(sp) { return (sp == null || isNaN(sp)) ? '' : speedBand(sp); }
+  // ความเร็ว: ใช้ค่าจากเครื่องถ้ามี ไม่งั้นคำนวณจากระยะ/เวลา (iPhone Safari มักคืน 0/null)
+  function effSpeed(sp, a, b) {
+    if (sp != null && sp > 0.05) return sp;
+    if (!a || !b || !a.t || !b.t) return sp;
+    const dtH = (b.t - a.t) / 3600000;
+    if (dtH <= 0) return sp;
+    return haversineNm(a, b) / dtH;
+  }
+  // ความเร็วสด เฉลี่ยหน้าต่าง ~25 วิ (ลด jitter) — ใช้ตอนเครื่องไม่ให้ speed
+  function liveSpeedKn(p) {
+    if (p.sp != null && p.sp > 0.05) return p.sp;
+    const pts = loadedPts; if (!pts || pts.length < 2) return p.sp;
+    let ref = null;
+    for (let i = pts.length - 1; i >= 0; i--) { if ((p.t - pts[i].t) >= 25000) { ref = pts[i]; break; } }
+    if (!ref) ref = pts[0];
+    const dtH = (p.t - ref.t) / 3600000;
+    if (dtH <= 0 || haversineNm(ref, p) < 0.005) return p.sp != null ? p.sp : 0;   // อยู่นิ่ง = 0
+    return haversineNm(ref, p) / dtH;
+  }
 
   // รับ current ใหม่ → เก็บไว้ แล้วตัดสินใจ (GPS/AIS)
   function applyCurrent(p) {
@@ -787,12 +806,13 @@ else {
     lastCurLL = { lat: p.lat, lon: p.lon, hd: hdg };
     const sp = spInfo(p.lat, p.lon);
     const spTxt = (sp && sp.offM < 3000) ? ('Line ' + sp.line + ' · SP ~' + sp.sp) : '';
-    marker.bindPopup(`<b>${VESSEL_ID}</b><br>${fmt(p.lat,5)}, ${fmt(p.lon,5)}<br>Speed ${fmt(p.sp,1)} kn · Heading ${fmt(p.hd,0)}°${spTxt ? '<br>' + spTxt : ''}<br>${new Date(p.t).toLocaleString('en-GB')}`);
+    const spd = liveSpeedKn(p);
+    marker.bindPopup(`<b>${VESSEL_ID}</b><br>${fmt(p.lat,5)}, ${fmt(p.lon,5)}<br>Speed ${fmt(spd,1)} kn · Heading ${fmt(p.hd,0)}°${spTxt ? '<br>' + spTxt : ''}<br>${new Date(p.t).toLocaleString('en-GB')}`);
     $('sSP').innerHTML = spTxt ? (sp.line + ' · <b>SP ' + sp.sp + '</b>') : '–';
     if (follow) map.panTo(ll);
 
-    $('sSpd').innerHTML = fmt(p.sp,1) + ' <span class="unit">knots</span>';
-    $('sSpd').style.color = speedColor(p.sp);
+    $('sSpd').innerHTML = fmt(spd,1) + ' <span class="unit">knots</span>';
+    $('sSpd').style.color = speedColor(spd);
     $('sHdg').innerHTML = fmt(p.hd,0) + ' <span class="unit">°</span>';
     $('sLat').textContent = fmt(p.lat,5);
     $('sLon').textContent = fmt(p.lon,5);
@@ -894,10 +914,10 @@ else {
     trackLine.setStyle({ opacity: 0 });
     if (src.length < 2) return;
     let seg = [[src[0].lat, src[0].lon]];
-    let segColor = trackSpeedColor(src[1].sp);
+    let segColor = trackSpeedColor(effSpeed(src[1].sp, src[0], src[1]));
     for (let i = 1; i < src.length; i++) {
       seg.push([src[i].lat, src[i].lon]);
-      const c = trackSpeedColor(src[i].sp);
+      const c = trackSpeedColor(effSpeed(src[i].sp, src[i - 1], src[i]));
       if (c !== segColor) {
         L.polyline(seg, { color: segColor, weight: 4, opacity: .9 }).addTo(speedTrackLayer);
         seg = [[src[i].lat, src[i].lon]]; segColor = c;
