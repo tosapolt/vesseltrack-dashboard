@@ -385,7 +385,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-43';
+const BUILD = '2026-08-13-44';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -748,16 +748,15 @@ function sailLineFor(lat, lon, hd) {
 function drawStreamers(lat, lon, headingDeg) {
   streamerLayer.clearLayers();
   if (!strOn || speedColorOn) return;   // โหมด Speed = ซ่อน streamer
-  const sail = sailLineFor(lat, lon, headingDeg);
-  if (sail) {                            // อยู่บนไลน์ (หรือ run-in/out) → เส้นตรงขนาน sail line (กัน GPS สั่น)
-    drawStraightStreamers(sail.anchor[0], sail.anchor[1], sail.azimuth);
-    return;
-  }
-  // ไม่อยู่บนไลน์ (เลี้ยว/เปลี่ยนไลน์) → ลาก streamer โค้งตามเส้นทางจริงที่เรือเพิ่งวิ่งผ่าน
+  // สายเคเบิลจริงจะวางตาม "เส้นทางที่เรือเพิ่งลากผ่าน" เสมอ → ลาก streamer ตาม track จริง 6 กม.ล่าสุด
+  //  • วิ่งตรงบนไลน์ = track ตรง → streamer ตรงเอง (ผ่าน smooth กัน GPS สั่น)
+  //  • เลี้ยว/เพิ่งเลี้ยวเสร็จ = track โค้ง → streamer โค้งค้างตามจนกว่าจะลากตรงครบ 6 กม.
   const XY = strTailXY(lat, lon, STR_LEN_M);
-  if (XY) { drawCurvedStreamers(lat, lon, XY); return; }
-  // ไม่มี track เพียงพอ → เส้นตรงตามหัวเรือ
-  drawStraightStreamers(lat, lon, (headingDeg == null || isNaN(headingDeg)) ? 0 : headingDeg);
+  if (XY && XY.length >= 4) { drawCurvedStreamers(lat, lon, XY); return; }
+  // track ยังสั้น (เพิ่งเริ่ม/อยู่นิ่ง) → เส้นตรงตามหัวเรือ หรือแนว sail line
+  let az = headingDeg;
+  if (az == null || isNaN(az)) { const sail = sailLineFor(lat, lon, headingDeg); az = sail ? sail.azimuth : 0; }
+  drawStraightStreamers(lat, lon, az);
 }
 
 // streamer เส้นตรง (ขนานแนว az) — ใช้ตอนอยู่บนไลน์
@@ -809,7 +808,7 @@ function strSmoothXY(XY, win) {
 function drawCurvedStreamers(lat, lon, XY) {
   const mE = Math.cos(lat * Math.PI / 180) * 111320, mN = 110540;
   const toLL = p => [ lat + p[1] / mN, lon + p[0] / mE ];
-  const c = strSmoothXY(XY, 2), N = c.length;
+  const c = strSmoothXY(strSmoothXY(XY, 3), 3), N = c.length;   // smooth 2 รอบ กัน GPS สั่นตอนวิ่งตรง
   const perp = [];
   for (let i = 0; i < N; i++) {
     const a = c[Math.max(0, i - 1)], b = c[Math.min(N - 1, i + 1)];
