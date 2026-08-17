@@ -142,6 +142,32 @@
     background:rgba(11,21,38,.85); border:1px solid #22344f; border-radius:8px; padding:6px 10px; font-size:.72rem; color:#eaf1fb;}
   #speedLegend b{display:inline-flex; align-items:center; gap:4px; font-weight:600;}
   #speedLegend i{width:11px; height:11px; border-radius:3px; display:inline-block;}
+  /* ---- Weather panel (wind / waves at vessel) ---- */
+  #wxPanel{position:absolute; top:12px; right:12px; z-index:850; display:none; min-width:190px; max-width:230px;
+    background:rgba(11,21,38,.9); border:1px solid #2b466b; border-radius:10px; color:#eaf1fb; font-size:.78rem;
+    box-shadow:0 4px 16px rgba(0,0,0,.45); overflow:hidden; backdrop-filter:blur(3px);}
+  #wxPanel .wx-hd{display:flex; align-items:center; gap:7px; padding:8px 11px; background:rgba(61,155,255,.14); border-bottom:1px solid #2b466b; font-weight:700;}
+  #wxPanel .wx-hd .wx-loc{margin-left:auto; font-weight:400; color:#9fb2cc; font-size:.68rem;}
+  #wxPanel .wx-body{padding:9px 11px; display:flex; flex-direction:column; gap:9px;}
+  #wxPanel .wx-wind{display:flex; align-items:center; gap:11px;}
+  #wxPanel .wx-arrow{width:42px; height:42px; flex:none; position:relative;}
+  #wxPanel .wx-arrow svg{display:block; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));}
+  #wxPanel .wx-wnum b{font-size:1.35rem; font-weight:700; font-variant-numeric:tabular-nums;}
+  #wxPanel .wx-wnum .u{color:#9fb2cc; font-size:.72rem; font-weight:400;}
+  #wxPanel .wx-wsub{color:#cfe0f5; font-size:.72rem; margin-top:1px;}
+  #wxPanel .wx-rows{display:grid; grid-template-columns:auto 1fr; gap:3px 10px; font-size:.74rem;}
+  #wxPanel .wx-rows .k{color:#9fb2cc;}
+  #wxPanel .wx-rows .v{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap;}
+  #wxPanel .wx-ft{padding:5px 11px; border-top:1px solid #22344f; color:#6b7f9c; font-size:.64rem; display:flex; justify-content:space-between; gap:6px;}
+  #wxPanel .wx-ft a{color:#7fb3ea; text-decoration:none;}
+  #wxPanel.loading .wx-body{opacity:.45;}
+  /* ---- Wind overlay legend (colour by speed) ---- */
+  #wxLegend{position:absolute; right:12px; bottom:14px; z-index:800; display:none; background:rgba(11,21,38,.86);
+    border:1px solid #22344f; border-radius:8px; padding:6px 10px; font-size:.68rem; color:#eaf1fb; box-shadow:0 2px 10px rgba(0,0,0,.4);}
+  #wxLegend .wl-bar{height:8px; width:150px; border-radius:4px; margin:4px 0 2px;
+    background:linear-gradient(90deg,#9fc9ff,#6fd3cb,#8ae65a,#f5e663,#f5a623,#e8503a,#c81e1e);}
+  #wxLegend .wl-sc{display:flex; justify-content:space-between; color:#9fb2cc;}
+  @media (max-width:700px){ #wxPanel{min-width:0; max-width:56vw; font-size:.72rem;} #wxLegend{display:none !important;} }
   /* ---- Map legend (line colours) ---- */
   #mapLegend{position:absolute; top:96px; left:10px; z-index:800; background:rgba(11,21,38,.86); border:1px solid #22344f; border-radius:8px; color:#eaf1fb; font-size:.72rem; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.4);}
   #mapLegend .ml-hd{padding:5px 10px; cursor:pointer; font-weight:700; user-select:none; display:flex; justify-content:space-between; gap:12px;}
@@ -200,6 +226,7 @@
   <button id="btnMeasure">📏 Measure</button>
   <button id="btnSpeedTrack" title="โหมดดูความเร็ว: ซ่อนทุกอย่าง เหลือแต่เส้นทางเรือระบายสีความเร็ว">🎨 Speed</button>
   <button id="btnTrack" class="active" title="แสดง/ซ่อน เส้นเส้นทางเดินเรือ (vessel track)">🧵 Track</button>
+  <button id="btnWx" title="สภาพอากาศ: ลมไหลแบบ Windy บนแผนที่ + ลม/คลื่น/swell ที่ตำแหน่งเรือ (ฟรี Open-Meteo)">🌦️ Weather</button>
   <button id="btnBanner" class="active">🖼 Banner</button>
   <button id="btnLines" title="ไฮไลต์เส้นที่ยิงเสร็จ (Acquired)">✅ Lines</button>
   <div class="dropdown" id="polyDrop">
@@ -327,6 +354,7 @@
 </div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet-velocity@2.1.4/dist/leaflet-velocity.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
@@ -357,7 +385,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-39';
+const BUILD = '2026-08-13-41';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -538,6 +566,109 @@ spLegend.innerHTML =
   '</div>';
 document.getElementById('map').appendChild(spLegend);
 
+/* ================= 🌦️ Weather (Open-Meteo — free, no API key) ================= */
+const wxPanel = document.createElement('div');
+wxPanel.id = 'wxPanel';
+wxPanel.innerHTML =
+  '<div class="wx-hd">🌦️ Weather <span class="wx-loc">at vessel</span></div>' +
+  '<div class="wx-body">' +
+    '<div class="wx-wind"><div class="wx-arrow" id="wxArrow"></div>' +
+      '<div><div class="wx-wnum"><b id="wxWspd">–</b> <span class="u">kn</span></div>' +
+      '<div class="wx-wsub" id="wxWsub">–</div></div></div>' +
+    '<div class="wx-rows">' +
+      '<span class="k">Gust</span><span class="v" id="wxGust">–</span>' +
+      '<span class="k">Wave (sig.)</span><span class="v" id="wxWave">–</span>' +
+      '<span class="k">Swell</span><span class="v" id="wxSwell">–</span>' +
+      '<span class="k">Rain</span><span class="v" id="wxRain">–</span>' +
+      '<span class="k">Cloud</span><span class="v" id="wxCloud">–</span>' +
+    '</div></div>' +
+  '<div class="wx-ft"><span id="wxTime">–</span><a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a></div>';
+document.getElementById('map').appendChild(wxPanel);
+
+const wxLegend = document.createElement('div');
+wxLegend.id = 'wxLegend';
+wxLegend.innerHTML = '<div style="font-weight:700">Wind (knots)</div><div class="wl-bar"></div><div class="wl-sc"><span>0</span><span>12</span><span>25+</span></div>';
+document.getElementById('map').appendChild(wxLegend);
+
+let wxOn = false, windLayer = null, wxMoveTimer = null, wxTimer = null;
+const WX_MAXV = 25;   // knots → top of colour scale
+
+function windArrowSvg(fromDeg, spd) {
+  const toDeg = (((fromDeg||0) + 180) % 360);   // ลูกศรชี้ "ทิศที่ลมพัดไป"
+  const col = spd>=22?'#e8503a':spd>=16?'#f5a623':spd>=10?'#f5e663':spd>=5?'#8ae65a':'#6fd3cb';
+  return '<svg width="42" height="42" viewBox="0 0 42 42"><g transform="rotate('+toDeg+' 21 21)">' +
+    '<path d="M21 5 L28 33 L21 27 L14 33 Z" fill="'+col+'" stroke="#0b1526" stroke-width="1"/></g></svg>';
+}
+const WX_CARD = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+const wxCardinal = d => WX_CARD[Math.round(((d||0)%360)/22.5)%16];
+
+async function wxFetchGrid() {
+  if (typeof L.velocityLayer !== 'function') return null;
+  const b = map.getBounds().pad(0.35);
+  const W=b.getWest(), E=b.getEast(), S=b.getSouth(), N=b.getNorth();
+  const nx=11, ny=13, dx=(E-W)/(nx-1), dy=(N-S)/(ny-1);
+  const LA=[], LO=[];
+  for (let iy=0; iy<ny; iy++){ const lat=N-iy*dy; for (let ix=0; ix<nx; ix++){ LA.push(+lat.toFixed(4)); LO.push(+(W+ix*dx).toFixed(4)); } }
+  const url='https://api.open-meteo.com/v1/forecast?latitude='+LA.join(',')+'&longitude='+LO.join(',')+'&current=wind_speed_10m,wind_direction_10m&wind_speed_unit=kn&timezone=UTC';
+  const arr = await (await fetch(url)).json();
+  if (!Array.isArray(arr)) return null;
+  const U=[], V=[];
+  arr.forEach(p=>{ const sp=p.current.wind_speed_10m, d=p.current.wind_direction_10m*Math.PI/180; U.push(-sp*Math.sin(d)); V.push(-sp*Math.cos(d)); });
+  const hU={parameterCategory:1,parameterNumber:2,nx,ny,lo1:W,la1:N,dx,dy,refTime:new Date().toISOString()};
+  return [{header:hU,data:U},{header:Object.assign({},hU,{parameterNumber:3}),data:V}];
+}
+function wxBuildLayer(vdata) {
+  if (windLayer) { map.removeLayer(windLayer); windLayer=null; }
+  windLayer = L.velocityLayer({
+    displayValues:false, data:vdata, maxVelocity:WX_MAXV, minVelocity:0,
+    velocityScale:0.011, particleAge:70, particleMultiplier:0.0026, lineWidth:1.5, frameRate:18,
+    colorScale:['#9fc9ff','#6fd3cb','#8ae65a','#f5e663','#f5a623','#e8503a','#c81e1e']
+  }).addTo(map);
+  try { if (windLayer._canvasLayer && windLayer._canvasLayer._canvas) windLayer._canvasLayer._canvas.style.opacity='0.6'; } catch(e){}
+}
+async function wxRefreshOverlay(){ if(!wxOn) return; try{ const vd=await wxFetchGrid(); if(vd&&wxOn) wxBuildLayer(vd); }catch(e){} }
+async function wxRefreshPanel(){
+  if(!wxOn) return;
+  const pos = lastCurLL || { lat:11.55, lon:101.0 };
+  wxPanel.classList.add('loading');
+  try{
+    const f = await (await fetch('https://api.open-meteo.com/v1/forecast?latitude='+pos.lat+'&longitude='+pos.lon+'&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,cloud_cover&wind_speed_unit=kn&timezone=UTC')).json();
+    let m=null; try{ m = await (await fetch('https://marine-api.open-meteo.com/v1/marine?latitude='+pos.lat+'&longitude='+pos.lon+'&current=wave_height,wave_period,swell_wave_height,swell_wave_period&timezone=UTC')).json(); }catch(e){}
+    const c=f.current;
+    document.getElementById('wxWspd').textContent = fmt(c.wind_speed_10m,0);
+    document.getElementById('wxArrow').innerHTML = windArrowSvg(c.wind_direction_10m, c.wind_speed_10m);
+    document.getElementById('wxWsub').textContent = 'from '+wxCardinal(c.wind_direction_10m)+' ('+fmt(c.wind_direction_10m,0)+'°)';
+    document.getElementById('wxGust').textContent = fmt(c.wind_gusts_10m,0)+' kn';
+    document.getElementById('wxRain').textContent = fmt(c.precipitation,1)+' mm';
+    document.getElementById('wxCloud').textContent = fmt(c.cloud_cover,0)+' %';
+    if (m && m.current){ const w=m.current;
+      document.getElementById('wxWave').textContent = fmt(w.wave_height,1)+' m · '+fmt(w.wave_period,0)+' s';
+      document.getElementById('wxSwell').textContent = fmt(w.swell_wave_height,1)+' m · '+fmt(w.swell_wave_period,0)+' s';
+    } else { document.getElementById('wxWave').textContent='n/a'; document.getElementById('wxSwell').textContent='n/a'; }
+    document.getElementById('wxTime').textContent = 'Updated '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  }catch(e){ document.getElementById('wxTime').textContent='weather unavailable'; }
+  wxPanel.classList.remove('loading');
+}
+function wxOnMove(){ if(!wxOn) return; clearTimeout(wxMoveTimer); wxMoveTimer=setTimeout(wxRefreshOverlay,700); }
+function wxSetOn(on){
+  wxOn = on;
+  const btnWx = document.getElementById('btnWx');
+  btnWx.classList.toggle('active', on);
+  wxPanel.style.display = on?'block':'none';
+  wxLegend.style.display = on?'block':'none';
+  if (on){
+    if (typeof L.velocityLayer !== 'function') document.getElementById('wxTime').textContent='wind overlay unavailable';
+    wxRefreshOverlay(); wxRefreshPanel();
+    wxTimer = setInterval(()=>{ wxRefreshOverlay(); wxRefreshPanel(); }, 600000);
+    map.on('moveend', wxOnMove);
+  } else {
+    if (windLayer){ map.removeLayer(windLayer); windLayer=null; }
+    if (wxTimer){ clearInterval(wxTimer); wxTimer=null; }
+    map.off('moveend', wxOnMove);
+  }
+}
+document.getElementById('btnWx').onclick = ()=> wxSetOn(!wxOn);
+
 // legend อธิบายสีเส้นบนแผนที่ (กดหัวเพื่อย่อ/ขยาย)
 const mapLegend = document.createElement('div');
 mapLegend.id = 'mapLegend';
@@ -586,7 +717,8 @@ function estimateHeading() {
 
 // หา sail line (เส้น pre-plot ที่ใกล้เรือสุด) → คืน azimuth ของเส้น + จุดโปรเจกต์บนเส้น
 // เพื่อให้ streamer วาง "ขนาน" กับ sail line และ "อยู่ตรงกลาง" เส้น (ไม่อิงหัวเรือที่ส่าย)
-const STR_SNAP_MAX_M = 150;    // ถ้าเรือห่างเส้นเกินนี้ ถือว่ายังไม่ได้อยู่บนไลน์ (เส้นห่าง ~277 ม. → ครึ่งหนึ่ง) ตอนเลี้ยว/เข้าไลน์ให้ลาก streamer จากท้ายเรือตามหัวเรือแทน
+const STR_SNAP_MAX_M = 150;    // ระยะห่างจากแนวเส้น (ตั้งฉาก) เกินนี้ = ไม่ snap, ลาก streamer ตามหัวเรือแทน
+const STR_RUNIN_M    = 4000;   // ยอมให้ snap เลยปลายเส้นได้เท่านี้ (ช่วง run-in ก่อนเข้าไลน์ / run-out หลังจบไลน์) — เรือยัง align กับ bearing ของไลน์อยู่
 function sailLineFor(lat, lon, hd) {
   if (typeof PREPLOT === 'undefined' || !PREPLOT.length) return null;
   const mE = Math.cos(lat * Math.PI / 180) * 111320, mN = 110540;   // เมตรต่อองศา (east/north)
@@ -596,10 +728,12 @@ function sailLineFor(lat, lon, hd) {
     const A = toXY(L.c[0]), Z = toXY(L.c[1]);
     const Dx = Z[0] - A[0], Dy = Z[1] - A[1], len2 = Dx*Dx + Dy*Dy;
     if (len2 < 1) return;
-    let t = -(A[0]*Dx + A[1]*Dy) / len2;   // โปรเจกต์ origin ลงเส้น
-    t = Math.max(0, Math.min(1, t));
+    const len = Math.sqrt(len2);
+    let t = -(A[0]*Dx + A[1]*Dy) / len2;              // โปรเจกต์ origin ลงเส้น (0=ปลายใต้, 1=ปลายเหนือ)
+    const ext = STR_RUNIN_M / len;                    // อนุญาตให้เลยปลายได้ ±STR_RUNIN_M
+    t = Math.max(-ext, Math.min(1 + ext, t));         // ในช่วง run-in/out ใช้ระยะตั้งฉากกับแนวเส้น; นอกช่วงตัดที่ปลายเส้น
     const Px = A[0] + t*Dx, Py = A[1] + t*Dy, dist = Math.hypot(Px, Py);
-    if (dist < bestD) { bestD = dist; best = { Px, Py, Dx, Dy, len: Math.sqrt(len2), name: L.n }; }
+    if (dist < bestD) { bestD = dist; best = { Px, Py, Dx, Dy, len, name: L.n }; }
   });
   if (!best || bestD > STR_SNAP_MAX_M) return null;
   const ux = best.Dx / best.len, uy = best.Dy / best.len;   // unit vector ตามเส้น (east,north)
