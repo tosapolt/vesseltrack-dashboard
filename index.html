@@ -385,7 +385,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-42';
+const BUILD = '2026-08-13-43';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -748,26 +748,87 @@ function sailLineFor(lat, lon, hd) {
 function drawStreamers(lat, lon, headingDeg) {
   streamerLayer.clearLayers();
   if (!strOn || speedColorOn) return;   // โหมด Speed = ซ่อน streamer
-  // ปรับให้ขนาน + อยู่ตรงกลาง sail line ถ้าเรืออยู่บนไลน์; ไม่งั้น fallback อิงหัวเรือ
-  let aLat = lat, aLon = lon, az = headingDeg;
   const sail = sailLineFor(lat, lon, headingDeg);
-  if (sail) { aLat = sail.anchor[0]; aLon = sail.anchor[1]; az = sail.azimuth; }
+  if (sail) {                            // อยู่บนไลน์ (หรือ run-in/out) → เส้นตรงขนาน sail line (กัน GPS สั่น)
+    drawStraightStreamers(sail.anchor[0], sail.anchor[1], sail.azimuth);
+    return;
+  }
+  // ไม่อยู่บนไลน์ (เลี้ยว/เปลี่ยนไลน์) → ลาก streamer โค้งตามเส้นทางจริงที่เรือเพิ่งวิ่งผ่าน
+  const XY = strTailXY(lat, lon, STR_LEN_M);
+  if (XY) { drawCurvedStreamers(lat, lon, XY); return; }
+  // ไม่มี track เพียงพอ → เส้นตรงตามหัวเรือ
+  drawStraightStreamers(lat, lon, (headingDeg == null || isNaN(headingDeg)) ? 0 : headingDeg);
+}
+
+// streamer เส้นตรง (ขนานแนว az) — ใช้ตอนอยู่บนไลน์
+function drawStraightStreamers(aLat, aLon, az) {
   if (az == null || isNaN(az)) az = 0;
-  const back = (az + 180) % 360;   // ทิศลากไปด้านหลัง (ตามแนว sail line)
-  const perp = (az + 90) % 360;     // แกนกว้างของ spread (ตั้งฉาก sail line)
+  const back = (az + 180) % 360, perp = (az + 90) % 360;
   const halfN = (STR_COUNT - 1) / 2;
   const ends = [], starts = [];
   for (let i = 0; i < STR_COUNT; i++) {
     const off = (i - halfN) * STR_SEP_M;
-    const s = destPoint(aLat, aLon, perp, off);         // จุดเริ่ม (offset ข้าง จากจุดกึ่งกลางบนเส้น)
-    const e = destPoint(s[0], s[1], back, STR_LEN_M);   // ลากถอยหลัง 6 km ขนานเส้น
+    const s = destPoint(aLat, aLon, perp, off);
+    const e = destPoint(s[0], s[1], back, STR_LEN_M);
     starts.push(s); ends.push(e);
     L.polyline([s, e], { color: '#22d3ee', weight: 1, opacity: .75 }).addTo(streamerLayer);
   }
-  // กรอบพื้นที่ spread + เส้นปลาย (tail)
   L.polygon([starts[0], starts[STR_COUNT-1], ends[STR_COUNT-1], ends[0]],
     { color: '#22d3ee', weight: 1, opacity: .5, fillOpacity: .05, dashArray: '4 4' }).addTo(streamerLayer);
   L.polyline([ends[0], ends[STR_COUNT-1]], { color: '#22d3ee', weight: 1.5, opacity: .8 }).addTo(streamerLayer);
+}
+
+// สร้างแนวกลาง (เมตร, ENU รอบเรือ) จาก track ล่าสุด ย้อนหลังไม่เกิน maxLenM
+function strTailXY(lat, lon, maxLenM) {
+  const lls = (typeof trackLine !== 'undefined') ? trackLine.getLatLngs() : null;
+  if (!lls || lls.length < 3) return null;
+  const mE = Math.cos(lat * Math.PI / 180) * 111320, mN = 110540;
+  const XY = [[0, 0]];                 // เริ่มที่ตำแหน่งเรือ
+  let acc = 0, prev = [0, 0];
+  for (let i = lls.length - 1; i >= 0; i--) {
+    const x = (lls[i].lng - lon) * mE, y = (lls[i].lat - lat) * mN;
+    const dx = x - prev[0], dy = y - prev[1], d = Math.hypot(dx, dy);
+    if (d < 20) continue;              // ข้ามจุดซ้อน/สั่น (เก็บทุก ~20 ม.)
+    acc += d; XY.push([x, y]); prev = [x, y];
+    if (acc >= maxLenM) break;
+  }
+  return XY.length >= 3 ? XY : null;
+}
+function strSmoothXY(XY, win) {
+  if (XY.length <= 3) return XY;
+  const out = [XY[0]];
+  for (let i = 1; i < XY.length - 1; i++) {
+    let sx = 0, sy = 0, n = 0;
+    for (let k = -win; k <= win; k++) { const j = i + k; if (j >= 0 && j < XY.length) { sx += XY[j][0]; sy += XY[j][1]; n++; } }
+    out.push([sx / n, sy / n]);
+  }
+  out.push(XY[XY.length - 1]);
+  return out;
+}
+// streamer โค้งตามเส้นทาง — กาง 8 เส้นตั้งฉากไปตลอดแนวโค้ง
+function drawCurvedStreamers(lat, lon, XY) {
+  const mE = Math.cos(lat * Math.PI / 180) * 111320, mN = 110540;
+  const toLL = p => [ lat + p[1] / mN, lon + p[0] / mE ];
+  const c = strSmoothXY(XY, 2), N = c.length;
+  const perp = [];
+  for (let i = 0; i < N; i++) {
+    const a = c[Math.max(0, i - 1)], b = c[Math.min(N - 1, i + 1)];
+    let tx = b[0] - a[0], ty = b[1] - a[1]; const L2 = Math.hypot(tx, ty) || 1; tx /= L2; ty /= L2;
+    perp.push([-ty, tx]);             // ตั้งฉากกับทิศเดินทางที่จุดนั้น
+  }
+  const halfN = (STR_COUNT - 1) / 2, edges = [];
+  for (let s = 0; s < STR_COUNT; s++) {
+    const off = (s - halfN) * STR_SEP_M;
+    const line = c.map((p, i) => toLL([ p[0] + perp[i][0] * off, p[1] + perp[i][1] * off ]));
+    L.polyline(line, { color: '#22d3ee', weight: 1, opacity: .75 }).addTo(streamerLayer);
+    if (s === 0 || s === STR_COUNT - 1) edges.push(line);
+  }
+  if (edges.length === 2) {
+    L.polygon(edges[0].concat(edges[1].slice().reverse()),
+      { color: '#22d3ee', weight: 1, opacity: .4, fillOpacity: .04, dashArray: '4 4' }).addTo(streamerLayer);
+    L.polyline([ edges[0][edges[0].length-1], edges[1][edges[1].length-1] ],
+      { color: '#22d3ee', weight: 1.5, opacity: .8 }).addTo(streamerLayer);
+  }
 }
 
 $('btnStr').onclick = () => {
