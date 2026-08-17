@@ -220,7 +220,7 @@
     <span class="date-sep">→</span>
     <input type="date" id="datePickTo" title="To date">
   </span>
-  <button id="btnKmz">🌍 KMZ</button>
+  <button id="btnKmz" style="display:none">🌍 KMZ</button>  <!-- ซ่อนชั่วคราว: export KMZ (เปิดคืนโดยลบ style นี้) -->
   <button id="btnStr" class="active">🎣 Streamers</button>
   <button id="btnFit">🧭 Fit track</button>
   <button id="btnMeasure">📏 Measure</button>
@@ -385,7 +385,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-44';
+const BUILD = '2026-08-13-45';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
