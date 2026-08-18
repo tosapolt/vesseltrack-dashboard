@@ -385,7 +385,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-45';
+const BUILD = '2026-08-13-46';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -510,6 +510,14 @@ function restyleLine(n) {
 }
 function restyleAllLines() { PREPLOT.forEach(l => restyleLine(l.n)); refreshPreLabels(); }
 
+// ---------- line ↔ acquisition Seq# (จาก daily report 10–17 ส.ค.) ----------
+const LINE_SEQ = {
+  '1024':'1', '1792':'2', '1048':'3', '1816':'4', '1072':'5',
+  '1840':'6/7/9', '1096':'8/10', '1864':'11', '1120':'12', '1888':'13',
+  '1144':'14/15', '1912':'16', '1168':'17', '1936':'18', '1192':'19',
+  '1960':'20/21', '1216':'22'
+};
+
 // ---------- Pre-plot line-number labels (โชว์ตอนซูมเข้า เกาะเส้นใกล้จุดที่ดู) ----------
 const preLabels = L.layerGroup();
 const PRE_LABEL_ZOOM = 12;
@@ -529,10 +537,14 @@ function refreshPreLabels() {
         if (d < bd) { bd = d; best = [lat, lon]; }
       }
     }
-    if (best) L.marker(best, {
-      icon: L.divIcon({ className: 'preplot-label' + (isLineDone(l.n) ? ' done' : ''), html: l.n, iconSize: [40, 16], iconAnchor: [20, 8] }),
-      interactive: false, keyboard: false
-    }).addTo(preLabels);
+    if (best) {
+      const sq = LINE_SEQ[l.n];
+      const html = l.n + (sq ? '<span style="color:#ffd479;font-weight:700"> S' + sq + '</span>' : '');
+      L.marker(best, {
+        icon: L.divIcon({ className: 'preplot-label' + (isLineDone(l.n) ? ' done' : ''), html: html, iconSize: [88, 16], iconAnchor: [44, 8] }),
+        interactive: false, keyboard: false
+      }).addTo(preLabels);
+    }
   });
 }
 map.on('zoomend moveend', refreshPreLabels);
