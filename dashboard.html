@@ -120,6 +120,7 @@
   .op-cell.sel{border-color:var(--accent);}
   .op-cell .chk{position:absolute; top:6px; left:6px; width:22px; height:22px; border-radius:6px; background:rgba(0,0,0,.55); border:1px solid #fff; display:flex; align-items:center; justify-content:center; color:#fff; font-size:.85rem; font-weight:700;}
   .op-cell .cell-del{position:absolute; top:6px; right:6px; background:rgba(231,76,60,.92); color:#fff; border:none; border-radius:6px; padding:3px 8px; cursor:pointer; font-size:.85rem;}
+  .op-cell .cell-dl{position:absolute; top:6px; right:40px; background:rgba(61,155,255,.92); color:#fff; border:none; border-radius:6px; padding:3px 8px; cursor:pointer; font-size:.85rem;}
   .op-empty{padding:34px; color:var(--ink3); text-align:center; grid-column:1/-1;}
   .op-textedit{display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; padding:14px 16px; border-bottom:1px solid var(--line);}
   .op-te-field{flex:1; min-width:200px; display:flex; flex-direction:column; gap:4px;}
@@ -396,7 +397,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-47';
+const BUILD = '2026-08-13-48';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -1917,6 +1918,19 @@ ${coords}
   };
   // ---------- หน้า Manage: เลือกรูปที่จะลบ ----------
   const selected = new Set();
+  function downloadPhoto(p) {
+    try {
+      const src = p.src || '';
+      let ext = '.jpg';
+      const m = src.match(/^data:image\/([a-z0-9+]+)/i);
+      if (m) ext = '.' + m[1].replace('jpeg', 'jpg');
+      else { const um = src.match(/\.(jpe?g|png|webp|gif)(\?|$)/i); if (um) ext = '.' + um[1].replace('jpeg', 'jpg'); }
+      const a = document.createElement('a');
+      a.href = src;
+      a.download = 'banner_' + (p.key ? String(p.key).slice(-8) : Date.now()) + ext;
+      document.body.appendChild(a); a.click(); a.remove();
+    } catch (e) { note('ดาวน์โหลดไม่สำเร็จ: ' + (e && e.message)); }
+  }
   function renderGrid() {
     const grid = el('opGrid');
     const uploaded = photos.filter(p => p.key);
@@ -1928,6 +1942,10 @@ ${coords}
       const cell = document.createElement('div'); cell.className = 'op-cell' + (selected.has(p.key) ? ' sel' : '');
       const im = document.createElement('img'); im.src = p.src; im.loading = 'lazy'; cell.appendChild(im);
       const chk = document.createElement('div'); chk.className = 'chk'; chk.textContent = selected.has(p.key) ? '✓' : ''; cell.appendChild(chk);
+      const dl = document.createElement('button'); dl.className = 'cell-dl'; dl.textContent = '⬇';
+      dl.title = 'ดาวน์โหลดรูปนี้';
+      dl.onclick = (e) => { e.stopPropagation(); downloadPhoto(p); };
+      cell.appendChild(dl);
       const del = document.createElement('button'); del.className = 'cell-del'; del.textContent = '🗑';
       del.onclick = (e) => { e.stopPropagation(); if (confirm('ลบรูปนี้?')) bannerRef.child(p.key).remove(); };
       cell.appendChild(del);
