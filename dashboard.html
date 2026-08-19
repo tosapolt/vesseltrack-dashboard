@@ -397,7 +397,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-49';
+const BUILD = '2026-08-13-50';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -632,7 +632,7 @@ async function wxFetchGrid() {
   if (typeof L.velocityLayer !== 'function') return null;
   const b = map.getBounds().pad(0.35);
   const W=b.getWest(), E=b.getEast(), S=b.getSouth(), N=b.getNorth();
-  const nx=16, ny=20, dx=(E-W)/(nx-1), dy=(N-S)/(ny-1);
+  const nx=7, ny=9, dx=(E-W)/(nx-1), dy=(N-S)/(ny-1);   // grid เล็ก = ประหยัดโควตา + interpolate ให้ลื่นอยู่แล้ว
   const LA=[], LO=[];
   for (let iy=0; iy<ny; iy++){ const lat=N-iy*dy; for (let ix=0; ix<nx; ix++){ LA.push(+lat.toFixed(4)); LO.push(+(W+ix*dx).toFixed(4)); } }
   const url='https://api.open-meteo.com/v1/forecast?latitude='+LA.join(',')+'&longitude='+LO.join(',')+'&current=wind_speed_10m,wind_direction_10m&wind_speed_unit=kn&timezone=UTC';
@@ -647,10 +647,10 @@ function wxBuildLayer(vdata) {
   if (windLayer) { map.removeLayer(windLayer); windLayer=null; }
   windLayer = L.velocityLayer({
     displayValues:false, data:vdata, maxVelocity:WX_MAXV, minVelocity:0,
-    velocityScale:0.012, particleAge:110, particleMultiplier:0.0015, lineWidth:1.1, frameRate:18,
+    velocityScale:0.012, particleAge:100, particleMultiplier:0.003, lineWidth:1.2, frameRate:18,
     colorScale:['#a9c8ff','#66c2e0','#46c99a','#7ed957','#c9e05a','#f2d24b','#f2a63a','#e8503a']
   }).addTo(map);
-  try { if (windLayer._canvasLayer && windLayer._canvasLayer._canvas) windLayer._canvasLayer._canvas.style.opacity='0.5'; } catch(e){}
+  try { if (windLayer._canvasLayer && windLayer._canvasLayer._canvas) windLayer._canvasLayer._canvas.style.opacity='0.58'; } catch(e){}
 }
 async function wxRefreshOverlay(){ if(!wxOn) return; try{ const vd=await wxFetchGrid(); if(vd&&wxOn) wxBuildLayer(vd); }catch(e){} }
 async function wxRefreshPanel(){
@@ -659,6 +659,7 @@ async function wxRefreshPanel(){
   wxPanel.classList.add('loading');
   try{
     const f = await (await fetch('https://api.open-meteo.com/v1/forecast?latitude='+pos.lat+'&longitude='+pos.lon+'&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,cloud_cover&wind_speed_unit=kn&timezone=UTC')).json();
+    if (f && f.error) { document.getElementById('wxTime').textContent = /limit/i.test(f.reason||'') ? 'weather quota reached — try later' : 'weather unavailable'; wxPanel.classList.remove('loading'); return; }
     let m=null; try{ m = await (await fetch('https://marine-api.open-meteo.com/v1/marine?latitude='+pos.lat+'&longitude='+pos.lon+'&current=wave_height,wave_period,swell_wave_height,swell_wave_period&timezone=UTC')).json(); }catch(e){}
     const c=f.current;
     document.getElementById('wxWspd').textContent = fmt(c.wind_speed_10m,0);
@@ -685,12 +686,11 @@ function wxSetOn(on){
   if (on){
     if (typeof L.velocityLayer !== 'function') document.getElementById('wxTime').textContent='wind overlay unavailable';
     wxRefreshOverlay(); wxRefreshPanel();
-    wxTimer = setInterval(()=>{ wxRefreshOverlay(); wxRefreshPanel(); }, 600000);
-    map.on('moveend', wxOnMove);
+    // ประหยัดโควตา Open-Meteo (free): รีเฟรชทุก 30 นาที, ไม่ดึงใหม่ตอนเลื่อนแผนที่
+    wxTimer = setInterval(()=>{ wxRefreshOverlay(); wxRefreshPanel(); }, 1800000);
   } else {
     if (windLayer){ map.removeLayer(windLayer); windLayer=null; }
     if (wxTimer){ clearInterval(wxTimer); wxTimer=null; }
-    map.off('moveend', wxOnMove);
   }
 }
 document.getElementById('btnWx').onclick = ()=> wxSetOn(!wxOn);
