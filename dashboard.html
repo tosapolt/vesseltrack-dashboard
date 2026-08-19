@@ -266,6 +266,17 @@
       <div class="lm-sub" id="lmBadList" style="margin-bottom:0"></div>
     </div>
 
+    <div style="margin-top:20px; border-top:1px solid #22344f; padding-top:14px;">
+      <h3 style="font-size:1.0rem; margin:0 0 4px;">🔢 Sequence numbers <span class="lm-count" id="lmSeqCount" style="color:#ffd479"></span></h3>
+      <div class="lm-sub">From the daily report ACQUISITION table: enter <b style="color:#ffd479">Seq#</b> and its <b>Line</b> (from the Name, e.g. 26NGOT<b>1984</b>P1023 → line 1984). Shows as <b style="color:#ffd479">S##</b> next to the pre-plot label. Multiple passes on one line stack automatically (e.g. S20/21).</div>
+      <div class="lm-row">
+        <input type="text" id="lmSeqInput" placeholder="Seq : Line,  e.g.  23:1984, 24:1240">
+        <button id="lmSeqMark" style="border-color:rgba(255,212,121,.7)">🔢 Add Seq#</button>
+        <button id="lmSeqClear" title="Type a line number to clear that line's Seq#, or leave empty to clear ALL">Clear line / all</button>
+      </div>
+      <div class="lm-sub" id="lmSeqList" style="margin-bottom:0"></div>
+    </div>
+
     <div class="lm-row" style="margin-top:18px; justify-content:space-between;">
       <button id="lmClear" style="border-color:rgba(231,76,60,.6);">🗑 Clear all acquired</button>
       <button id="lmClose">Close</button>
@@ -385,7 +396,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-46';
+const BUILD = '2026-08-13-47';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -515,8 +526,10 @@ const LINE_SEQ = {
   '1024':'1', '1792':'2', '1048':'3', '1816':'4', '1072':'5',
   '1840':'6/7/9', '1096':'8/10', '1864':'11', '1120':'12', '1888':'13',
   '1144':'14/15', '1912':'16', '1168':'17', '1936':'18', '1192':'19',
-  '1960':'20/21', '1216':'22'
+  '1960':'20/21', '1216':'22', '1984':'23', '1240':'24'
 };
+// live map (crew can edit via Firebase 'lineSeq'); falls back to defaults above when empty
+let seqMapLive = { ...LINE_SEQ };
 
 // ---------- Pre-plot line-number labels (โชว์ตอนซูมเข้า เกาะเส้นใกล้จุดที่ดู) ----------
 const preLabels = L.layerGroup();
@@ -538,7 +551,7 @@ function refreshPreLabels() {
       }
     }
     if (best) {
-      const sq = LINE_SEQ[l.n];
+      const sq = seqMapLive[l.n];
       const html = l.n + (sq ? '<span style="color:#ffd479;font-weight:700"> S' + sq + '</span>' : '');
       L.marker(best, {
         icon: L.divIcon({ className: 'preplot-label' + (isLineDone(l.n) ? ' done' : ''), html: html, iconSize: [88, 16], iconAnchor: [44, 8] }),
@@ -1589,6 +1602,7 @@ ${coords}
     alert('Incorrect PIN'); return false;
   }
   const badRef = base.child('lineBad');
+  const seqRef = base.child('lineSeq');
   function setLineDone(n, done) { n = String(n); if (done) doneRef.child(n).set(true); else doneRef.child(n).remove(); }
   function toggleLineDone(n) { if (!linesEnsurePin()) return; setLineDone(n, !isLineDone(n)); }
   // แปลงข้อความเป็นรายการเลข line จริง (รองรับ comma และช่วง 1984-2032)
@@ -1648,13 +1662,38 @@ ${coords}
       list.appendChild(tag);
     });
   }
+  // ---------- Sequence numbers (crew-editable, synced) ----------
+  function updateSeqList() {
+    const lines = Object.keys(seqMapLive).filter(n => seqMapLive[n]).sort((a, b) => (+a) - (+b));
+    const c = $('lmSeqCount'); if (c) c.textContent = lines.length ? (lines.length + ' line' + (lines.length > 1 ? 's' : '')) : '';
+    const list = $('lmSeqList'); if (!list) return;
+    list.innerHTML = '';
+    if (!lines.length) return;
+    const hint = document.createElement('div');
+    hint.style.cssText = 'margin-bottom:6px;color:#9fb2cc';
+    hint.textContent = 'Tap text to edit · tap ✕ to remove Seq# on that line:';
+    list.appendChild(hint);
+    lines.forEach(n => {
+      const tag = document.createElement('span'); tag.className = 'bad-tag';
+      tag.style.cssText = 'border-color:rgba(255,212,121,.5); color:#ffd479; background:#2a2411;';
+      const txt = document.createElement('span');
+      txt.textContent = 'S' + seqMapLive[n] + ' → ' + n;
+      txt.style.cursor = 'pointer'; txt.title = 'Click to load into the box and edit';
+      txt.onclick = () => { $('lmSeqInput').value = String(seqMapLive[n]).split('/')[0] + ':' + n; $('lmSeqInput').focus(); };
+      const x = document.createElement('button'); x.className = 'bad-x'; x.textContent = '✕';
+      x.style.color = '#ffd479'; x.title = 'Remove Seq# on line ' + n;
+      x.onclick = () => { if (!linesEnsurePin()) return; const next = { ...seqMapLive }; delete next[n]; seqRef.set(next); };
+      tag.appendChild(txt); tag.appendChild(x); list.appendChild(tag);
+    });
+  }
   // sync from Firebase → recolor + update UI
   doneRef.on('value', snap => { doneLinesSet = snap.val() || {}; restyleAllLines(); renderLinesGrid(); updateLinesCount(); });
   badRef.on('value', snap => { badRangesSet = snap.val() || {}; renderBadRanges(); updateBadCount(); });
+  seqRef.on('value', snap => { const v = snap.val(); seqMapLive = (v && Object.keys(v).length) ? v : { ...LINE_SEQ }; refreshPreLabels(); updateSeqList(); });
   // click a line on the map to toggle acquired
   PREPLOT.forEach(l => { const pl = preLinePolys[l.n]; if (pl) pl.on('click', () => toggleLineDone(l.n)); });
   // buttons / modal
-  $('btnLines').onclick = () => { renderLinesGrid(); updateLinesCount(); updateBadCount(); $('linesModal').style.display = 'flex'; };
+  $('btnLines').onclick = () => { renderLinesGrid(); updateLinesCount(); updateBadCount(); updateSeqList(); $('linesModal').style.display = 'flex'; };
   $('lmClose').onclick = () => { $('linesModal').style.display = 'none'; };
   $('lmMark').onclick = () => { if (!linesEnsurePin()) return; parseLineList($('lmInput').value).forEach(n => setLineDone(n, true)); $('lmInput').value = ''; };
   $('lmUnmark').onclick = () => { if (!linesEnsurePin()) return; parseLineList($('lmInput').value).forEach(n => setLineDone(n, false)); $('lmInput').value = ''; };
@@ -1676,6 +1715,36 @@ ${coords}
     const m = $('lmBadInput').value.trim().match(/^(\d+)/);
     if (m) { badRef.child(m[1]).remove(); $('lmBadInput').value = ''; }      // line number typed → clear that line
     else if (confirm('Clear ALL no-data (red) ranges for everyone?')) badRef.remove();   // empty box → clear all
+  };
+  // Seq#: "23:1984, 24:1240"  (accepts either order; stacks multiple passes as S20/21)
+  $('lmSeqMark').onclick = () => {
+    if (!linesEnsurePin()) return;
+    const pairs = $('lmSeqInput').value.split(',').map(s => s.trim()).filter(Boolean);
+    if (!pairs.length) { alert('Format:  Seq : Line   e.g.  23:1984, 24:1240'); return; }
+    const next = { ...seqMapLive }; const bad = [];
+    pairs.forEach(p => {
+      const mm = p.match(/^(\d+)\s*[:=\-\s]\s*(\d+)$/); if (!mm) { bad.push(p); return; }
+      let a = mm[1], b = mm[2], line, seq;
+      const aIsLine = !!PREPLOT.find(l => l.n === a), bIsLine = !!PREPLOT.find(l => l.n === b);
+      if (bIsLine && !aIsLine) { seq = a; line = b; }
+      else if (aIsLine && !bIsLine) { seq = b; line = a; }
+      else { seq = a; line = b; }                       // both/neither → assume Seq:Line
+      if (!PREPLOT.find(l => l.n === line)) { bad.push(p); return; }
+      const parts = next[line] ? String(next[line]).split('/') : [];
+      if (!parts.includes(seq)) parts.push(seq);
+      parts.sort((x, y) => (+x) - (+y));
+      next[line] = parts.join('/');
+    });
+    seqRef.set(next);
+    $('lmSeqInput').value = '';
+    if (bad.length) alert('Skipped (bad format / unknown line): ' + bad.join(', '));
+  };
+  $('lmSeqClear').onclick = () => {
+    if (!linesEnsurePin()) return;
+    const toks = ($('lmSeqInput').value.match(/\d+/g)) || [];
+    const line = toks.find(t => PREPLOT.find(l => l.n === t));
+    if (line) { const next = { ...seqMapLive }; delete next[line]; seqRef.set(next); $('lmSeqInput').value = ''; }
+    else if (confirm('Reset ALL Seq# back to the report defaults (Seq 1–22)?')) seqRef.remove();
   };
 }
 </script>
