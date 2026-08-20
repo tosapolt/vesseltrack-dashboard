@@ -387,7 +387,9 @@ const firebaseConfig = {
 
 const VESSEL_ID    = new URLSearchParams(location.search).get('id') || "seismic-1"; // ?id=test-1 = ดูเรือทดสอบ
 const TRACK_POINTS = 8000;        // จำนวนจุดต่อวัน (เผื่อมือถือส่งทุก 15 วิ ~5,760 จุด/วัน → เส้นถึงเที่ยงคืนครบทั้งวัน)
-const RANGE_POINTS = 8000;        // จำนวนจุดสูงสุดเมื่อดูแบบช่วงหลายวัน
+const RANGE_POINTS = 120000;      // เพดานดึงช่วงหลายวัน (เช่น ตั้งแต่ 10 ส.ค. ~60k จุด)
+const MAX_RENDER_PTS = 12000;     // ถ้าเกินนี้ downsample ให้เส้น/replay ลื่น แต่ยังครอบคลุมทั้งช่วง
+function thinPts(arr, maxN){ if(!arr || arr.length<=maxN) return arr; const step=Math.ceil(arr.length/maxN); const out=[]; for(let i=0;i<arr.length;i+=step) out.push(arr[i]); if(out[out.length-1]!==arr[arr.length-1]) out.push(arr[arr.length-1]); return out; }
 const STALE_SEC    = 300;         // เกินกี่วินาทีถือว่า feed ขาด (ไม่มีข้อมูลเข้าเลย)
 const STALE_MOVE_SEC = 900;       // ตำแหน่งไม่ขยับเกินกี่วินาที (ทั้งที่ feed ยังมา) = AIS ค้าง/สัญญาณหาย (15 นาที)
 const FROZEN_EPS_NM  = 0.02;      // ขยับน้อยกว่านี้ (~37 ม.) ถือว่า "ตำแหน่งเดิม"
@@ -397,7 +399,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-50';
+const BUILD = '2026-08-13-51';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -1052,8 +1054,8 @@ else {
     try {
       const cur = await fetch(DB_URL + '/current.json?_=' + Date.now(), { cache: 'no-store' }).then(r => r.json());
       if (cur) applyCurrent(cur);
-      // อัปเดตเส้นทางเฉพาะเมื่อช่วงที่ดูครอบคลุม "วันนี้"
-      if (rangeTo === localDateStr(new Date())) {
+      // อัปเดตเส้นทางเฉพาะเมื่อดู "วันนี้" แบบวันเดียว (กัน poll ตัวหนักไปทับช่วงหลายวัน)
+      if (rangeFrom === rangeTo && rangeTo === localDateStr(new Date())) {
         const start = new Date((rangeFrom || rangeTo) + 'T00:00:00').getTime();
         const end = new Date(rangeTo + 'T00:00:00').getTime() + 24 * 3600 * 1000 - 1;
         const lim = (rangeFrom === rangeTo) ? TRACK_POINTS : RANGE_POINTS;
@@ -1194,6 +1196,7 @@ else {
     trackQuery.on('value', snap => {
       loadedPts = [];
       snap.forEach(ch => { const p = ch.val(); if (p && p.lat != null) loadedPts.push(p); });
+      if (loadedPts.length > MAX_RENDER_PTS) loadedPts = thinPts(loadedPts, MAX_RENDER_PTS);   // ช่วงหลายวัน → ลดจุดให้ลื่น
       renderTrack();
       decideAndRender();   // ประวัติเปลี่ยน → ประเมินใหม่ (เผื่อยึด GPS ล่าสุดเมื่อ AIS ค้าง)
       if (lastCurLL) { const hh = (lastCurLL.hd!=null && !isNaN(lastCurLL.hd)) ? lastCurLL.hd : estimateHeading(); drawStreamers(lastCurLL.lat, lastCurLL.lon, hh); }
