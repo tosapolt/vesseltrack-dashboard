@@ -399,7 +399,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-51';
+const BUILD = '2026-08-13-52';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -664,16 +664,20 @@ async function wxRefreshPanel(){
     if (f && f.error) { document.getElementById('wxTime').textContent = /limit/i.test(f.reason||'') ? 'weather quota reached — try later' : 'weather unavailable'; wxPanel.classList.remove('loading'); return; }
     let m=null; try{ m = await (await fetch('https://marine-api.open-meteo.com/v1/marine?latitude='+pos.lat+'&longitude='+pos.lon+'&current=wave_height,wave_period,swell_wave_height,swell_wave_period&timezone=UTC')).json(); }catch(e){}
     const c=f.current;
-    document.getElementById('wxWspd').textContent = fmt(c.wind_speed_10m,0);
+    const wcol=(v,a,r)=> (v==null||isNaN(v))?'':(v>=r?'#ff6b6b':(v>=a?'#f5c451':''));   // ส้ม=เฝ้าระวัง แดง=เกินเกณฑ์
+    const wspdEl=document.getElementById('wxWspd');
+    wspdEl.textContent = fmt(c.wind_speed_10m,0); wspdEl.style.color = wcol(c.wind_speed_10m,25,30);
     document.getElementById('wxArrow').innerHTML = windArrowSvg(c.wind_direction_10m, c.wind_speed_10m);
     document.getElementById('wxWsub').textContent = 'from '+wxCardinal(c.wind_direction_10m)+' ('+fmt(c.wind_direction_10m,0)+'°)';
-    document.getElementById('wxGust').textContent = fmt(c.wind_gusts_10m,0)+' kn';
+    const gustEl=document.getElementById('wxGust');
+    gustEl.textContent = fmt(c.wind_gusts_10m,0)+' kn'; gustEl.style.color = wcol(c.wind_gusts_10m,33,40);
     document.getElementById('wxRain').textContent = fmt(c.precipitation,1)+' mm';
     document.getElementById('wxCloud').textContent = fmt(c.cloud_cover,0)+' %';
+    const waveEl=document.getElementById('wxWave'), swellEl=document.getElementById('wxSwell');
     if (m && m.current){ const w=m.current;
-      document.getElementById('wxWave').textContent = fmt(w.wave_height,1)+' m · '+fmt(w.wave_period,0)+' s';
-      document.getElementById('wxSwell').textContent = fmt(w.swell_wave_height,1)+' m · '+fmt(w.swell_wave_period,0)+' s';
-    } else { document.getElementById('wxWave').textContent='n/a'; document.getElementById('wxSwell').textContent='n/a'; }
+      waveEl.textContent = fmt(w.wave_height,1)+' m · '+fmt(w.wave_period,0)+' s'; waveEl.style.color = wcol(w.wave_height,1.5,2.0);
+      swellEl.textContent = fmt(w.swell_wave_height,1)+' m · '+fmt(w.swell_wave_period,0)+' s'; swellEl.style.color = wcol(w.swell_wave_height,1.0,1.5);
+    } else { waveEl.textContent='n/a'; waveEl.style.color=''; swellEl.textContent='n/a'; swellEl.style.color=''; }
     document.getElementById('wxTime').textContent = 'Updated '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
   }catch(e){ document.getElementById('wxTime').textContent='weather unavailable'; }
   wxPanel.classList.remove('loading');
