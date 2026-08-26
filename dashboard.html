@@ -399,7 +399,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-52';
+const BUILD = '2026-08-13-53';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -820,6 +820,7 @@ function strTailXY(lat, lon, maxLenM) {
     const x = (lls[i].lng - lon) * mE, y = (lls[i].lat - lat) * mN;
     const dx = x - prev[0], dy = y - prev[1], d = Math.hypot(dx, dy);
     if (d < 20) continue;              // ข้ามจุดซ้อน/สั่น (เก็บทุก ~20 ม.)
+    if (d > 500) break;                // ช่องว่าง/กระโดด (เช่น GPS หายแล้วกลับมา) → หยุด ไม่ลากข้าม
     acc += d; XY.push([x, y]); prev = [x, y];
     if (acc >= maxLenM) break;
   }
