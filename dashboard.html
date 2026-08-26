@@ -389,7 +389,9 @@ const VESSEL_ID    = new URLSearchParams(location.search).get('id') || "seismic-
 const TRACK_POINTS = 8000;        // จำนวนจุดต่อวัน (เผื่อมือถือส่งทุก 15 วิ ~5,760 จุด/วัน → เส้นถึงเที่ยงคืนครบทั้งวัน)
 const RANGE_POINTS = 120000;      // เพดานดึงช่วงหลายวัน (เช่น ตั้งแต่ 10 ส.ค. ~60k จุด)
 const MAX_RENDER_PTS = 12000;     // ถ้าเกินนี้ downsample ให้เส้น/replay ลื่น แต่ยังครอบคลุมทั้งช่วง
-const TRACK_GAP_M  = 1000;        // จุดติดกันห่างเกินนี้ (เมตร) = ตัดเส้น ไม่ลากเชื่อมข้ามช่องว่าง (เช่น GPS หายแล้วกลับมา)
+const SAIL_AZ_RAD  = 11.3 * Math.PI / 180;   // แนว inline ของ survey (sail line ~11° จากทิศเหนือ)
+const TRACK_XGAP_M = 200;         // กระโดด "ข้ามแนว" (cross-line/Xline) เกินนี้ = ตัดเส้น; แนว inline เดียวกัน (ยาวแค่ไหนก็) ต่อเส้นได้
+function crossJumpM(dE, dN){ return Math.abs(dE * Math.cos(SAIL_AZ_RAD) - dN * Math.sin(SAIL_AZ_RAD)); }  // ระยะเยื้องตั้งฉากกับแนวไลน์
 function thinPts(arr, maxN){ if(!arr || arr.length<=maxN) return arr; const step=Math.ceil(arr.length/maxN); const out=[]; for(let i=0;i<arr.length;i+=step) out.push(arr[i]); if(out[out.length-1]!==arr[arr.length-1]) out.push(arr[arr.length-1]); return out; }
 const STALE_SEC    = 300;         // เกินกี่วินาทีถือว่า feed ขาด (ไม่มีข้อมูลเข้าเลย)
 const STALE_MOVE_SEC = 900;       // ตำแหน่งไม่ขยับเกินกี่วินาที (ทั้งที่ feed ยังมา) = AIS ค้าง/สัญญาณหาย (15 นาที)
@@ -400,7 +402,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-54';
+const BUILD = '2026-08-13-55';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -822,7 +824,7 @@ function strTailXY(lat, lon, maxLenM) {
     const x = (lls[i].lng - lon) * mE, y = (lls[i].lat - lat) * mN;
     const dx = x - prev[0], dy = y - prev[1], d = Math.hypot(dx, dy);
     if (d < 20) continue;              // ข้ามจุดซ้อน/สั่น (เก็บทุก ~20 ม.)
-    if (d > 500) break;                // ช่องว่าง/กระโดด (เช่น GPS หายแล้วกลับมา) → หยุด ไม่ลากข้าม
+    if (crossJumpM(dx, dy) > TRACK_XGAP_M) break;   // กระโดดข้ามแนว (cross-line) → หยุด; แนว inline ต่อได้
     acc += d; XY.push([x, y]); prev = [x, y];
     if (acc >= maxLenM) break;
   }
@@ -1138,7 +1140,10 @@ else {
   function trackSpeedColor(sp) {
     return (sp == null || isNaN(sp)) ? '#3d9bff' : speedBand(sp);   // ไม่มีข้อมูล = น้ำเงิน
   }
-  const trackGap = (a, b) => haversineNm(a, b) * 1852 > TRACK_GAP_M;   // จุดห่างเกิน 1 กม. = ช่องว่าง
+  const trackGap = (a, b) => {   // ตัดเฉพาะเมื่อกระโดดข้ามแนว (cross-line); แนว inline เดียวกันต่อเส้นได้
+    const mE = Math.cos(a.lat * Math.PI / 180) * 111320;
+    return crossJumpM((b.lon - a.lon) * mE, (b.lat - a.lat) * 110540) > TRACK_XGAP_M;
+  };
   function renderTrack() {
     const src = cleanPts();
     // เส้นฟ้า: ตัดเป็นช่วง ๆ ถ้าจุดติดกันห่างเกิน TRACK_GAP_M (ไม่ลากเชื่อมข้ามช่องว่าง)
