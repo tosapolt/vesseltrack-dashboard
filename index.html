@@ -398,13 +398,14 @@ function thinPts(arr, maxN){ if(!arr || arr.length<=maxN) return arr; const step
 const STALE_SEC    = 300;         // เกินกี่วินาทีถือว่า feed ขาด (ไม่มีข้อมูลเข้าเลย)
 const STALE_MOVE_SEC = 900;       // ตำแหน่งไม่ขยับเกินกี่วินาที (ทั้งที่ feed ยังมา) = AIS ค้าง/สัญญาณหาย (15 นาที)
 const FROZEN_EPS_NM  = 0.02;      // ขยับน้อยกว่านี้ (~37 ม.) ถือว่า "ตำแหน่งเดิม"
+const PHONE_STUCK_MAX = 3;        // มือถือส่ง "ตำแหน่งเดิม" ซ้ำเกินจำนวนนี้ = GPS ค้าง → สลับไป AIS อัตโนมัติ
 // --- Streamer spread (mockup ลากท้ายเรือ) ---
 const STR_COUNT = 8;      // จำนวน streamer
 const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (เมตร) = 6 km
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-58';
+const BUILD = '2026-08-13-59';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -936,6 +937,7 @@ else {
 
   let lastPoint = null;
   let lastPhoneReceived = 0;
+  let lastPhonePos = null, phoneSamePos = 0;   // นับตำแหน่งจากมือถือที่ซ้ำเดิมติดกัน (จับ GPS ค้าง)
   let rawCurrent = null;             // ค่า current ดิบล่าสุดจาก Firebase (ก่อนตัดสินใจว่าจะโชว์จุดไหน)
   let lastRenderKey = '';
   const PHONE_PRIORITY_MS = 150000;  // มือถือส่ง GPS ภายใน 2.5 นาที = live priority
@@ -984,9 +986,19 @@ else {
   // รับ current ใหม่ → เก็บไว้ แล้วตัดสินใจ (GPS/AIS)
   function applyCurrent(p) {
     if (!p || !p.lat) return;
-    if (p.src === 'phone') lastPhoneReceived = Date.now();
+    if (p.src === 'phone') {
+      lastPhoneReceived = Date.now();
+      if (lastPhonePos && haversineNm(lastPhonePos, p) <= FROZEN_EPS_NM) phoneSamePos++;   // ตำแหน่งเดิม → นับเพิ่ม
+      else phoneSamePos = 1;                                                               // ขยับแล้ว → รีเซ็ต
+      lastPhonePos = p;
+    }
     rawCurrent = p;
     decideAndRender();
+  }
+  // จุด AIS (HiFleet) ล่าสุดในประวัติวันนี้
+  function latestAisPt() {
+    for (let i = loadedPts.length - 1; i >= 0; i--) if (loadedPts[i] && loadedPts[i].src === 'hifleet') return loadedPts[i];
+    return null;
   }
   // จุด GPS (มือถือ) ล่าสุดในประวัติวันนี้
   function latestPhonePt() {
@@ -1011,6 +1023,11 @@ else {
     if (!rawCurrent) return;
     let show = rawCurrent;
     const live = (rangeTo === localDateStr(new Date()));
+    // มือถือส่งตำแหน่งเดิมซ้ำเกิน PHONE_STUCK_MAX ครั้ง = GPS ค้าง → สลับไปใช้ AIS อัตโนมัติ (ถ้ามี AIS)
+    if (live && rawCurrent.src === 'phone' && phoneSamePos > PHONE_STUCK_MAX) {
+      const ais = latestAisPt();
+      if (ais && !isBadFix(ais)) { renderCurrent(ais); return; }
+    }
     if (live && rawCurrent.src === 'hifleet' && Date.now() - lastPhoneReceived >= PHONE_PRIORITY_MS) {
       const ph = latestPhonePt();
       if (ph) {
