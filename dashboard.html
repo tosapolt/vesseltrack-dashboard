@@ -405,7 +405,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-62';
+const BUILD = '2026-08-13-63';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -525,7 +525,7 @@ function renderBadRanges() {
 function isLineDone(n) { return !!doneLinesSet[String(n)]; }
 function restyleLine(n) {
   const pl = preLinePolys[n]; if (!pl) return;
-  if (isLineDone(n)) pl.setStyle({ color: '#22c55e', weight: 2, opacity: .9 });   // เส้นเขียวบาง ไม่บัง replay
+  if (isLineDone(n)) pl.setStyle({ color: '#22c55e', weight: 1, opacity: .85 });   // เส้นเขียวบาง ไม่บัง replay
   else pl.setStyle({ color: '#808080', weight: 1, opacity: .55 });
 }
 function restyleAllLines() { PREPLOT.forEach(l => restyleLine(l.n)); refreshPreLabels(); }
@@ -1539,7 +1539,7 @@ ${coords}
   let playing = false, simT = 0, lastFrame = 0, rafId = null, replayMarker = null;
   // pane แยกให้ replay (เส้น + streamer) อยู่ "ชั้นบน" เหนือเส้นเขียว/pre-plot เสมอ
   map.createPane('replayPane'); map.getPane('replayPane').style.zIndex = 450;
-  const replayTrail = L.polyline([], { color: '#f59e0b', weight: 3, opacity: .95, pane: 'replayPane' });
+  const replayTrail = L.polyline([], { color: '#f59e0b', weight: 1.5, opacity: .95, pane: 'replayPane' });
   const replayStreamerLayer = L.layerGroup().addTo(map);   // streamer หลังเรือ replay
 
   function replayRange() {
