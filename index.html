@@ -405,7 +405,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-59';
+const BUILD = '2026-08-13-60';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -1549,7 +1549,7 @@ ${coords}
     replayTrail.setLatLngs(trail);
     $('pbSlider').value = Math.round((simT - t0) / (t1 - t0) * 1000);
     $('pbClock').textContent = new Date(simT).toLocaleTimeString('en-GB');
-    map.panTo([lat,lon]);
+    // ไม่เลื่อนจอตามเรือระหว่าง replay — ให้ผู้ใช้ตั้งมุมมอง/ซูมเองได้ (กด Fit track ถ้าอยากเห็นทั้งเส้น)
     return simT >= t1;
   }
   function step(ts) {
