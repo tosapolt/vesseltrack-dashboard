@@ -405,7 +405,7 @@ const STR_LEN_M = 6000;   // ความยาวแต่ละเส้น (�
 const STR_SEP_M = 75;     // ระยะห่างระหว่างเส้น (เมตร)
 /* ============================================================ */
 
-const BUILD = '2026-08-13-60';
+const BUILD = '2026-08-13-61';
 // เช็คเวอร์ชันใหม่ทุก 5 นาที — ถ้า deploy ตัวใหม่จะขึ้นแถบให้กดอัปเดต (ไม่ reload เอง)
 setInterval(async () => {
   try {
@@ -584,7 +584,7 @@ function boatIcon(headingDeg) {
   });
 }
 
-let marker = null, follow = true;
+let marker = null, follow = true, replayActive = false;   // replayActive = กำลัง replay → ซ่อนเรือ live + ห้าม pan
 const trackLine = L.polyline([], { color: '#3d9bff', weight: 3, opacity: .85 }).addTo(map);
 const speedTrackLayer = L.layerGroup().addTo(map);   // เส้น track ระบายสีตามความเร็ว
 let speedColorOn = false;
@@ -1037,6 +1037,13 @@ else {
     }
     renderCurrent(show);
   }
+  // แสดง/ซ่อนเรือ live (marker + streamer) — ตอน replay ซ่อนเพื่อให้เหลือแต่เรือ replay สีส้ม
+  function setLiveVisible(v) {
+    replayActive = !v;
+    if (marker) { if (v) { if (!map.hasLayer(marker)) marker.addTo(map); } else if (map.hasLayer(marker)) map.removeLayer(marker); }
+    if (v) { if (lastCurLL) drawStreamers(lastCurLL.lat, lastCurLL.lon, lastCurLL.hd); }
+    else streamerLayer.clearLayers();
+  }
   function renderCurrent(p) {
     if (!p || !p.lat) return;
     if (isBadFix(p)) return;                    // ตำแหน่งกระโดด/นอกพื้นที่ → ไม่แสดง
@@ -1045,26 +1052,29 @@ else {
     lastRenderKey = key;
     lastPoint = p;
     const ll = [p.lat, p.lon];
-    if (!marker) {
-      marker = L.marker(ll, { icon: boatIcon(p.hd) }).addTo(map);
-      map.setView(ll, 13);
-    } else {
-      marker.setLatLng(ll);
-      marker.setIcon(boatIcon(p.hd));
-    }
+    if (!replayActive) {                        // ตอน replay ไม่วาด/ไม่ขยับเรือ live และไม่ pan
+      if (!marker) {
+        marker = L.marker(ll, { icon: boatIcon(p.hd) }).addTo(map);
+        map.setView(ll, 13);
+      } else {
+        if (!map.hasLayer(marker)) marker.addTo(map);
+        marker.setLatLng(ll);
+        marker.setIcon(boatIcon(p.hd));
+      }
+    } else if (marker && map.hasLayer(marker)) { map.removeLayer(marker); }
     // heading: ใช้ค่าจากเรือ → คำนวณจากตำแหน่งก่อนหน้า → คำนวณจากเส้นทาง
     let hdg = p.hd;
     if ((hdg == null || isNaN(hdg)) && lastCurLL) hdg = bearingDeg(lastCurLL, p);
     if (hdg == null || isNaN(hdg)) hdg = estimateHeading();
-    drawStreamers(p.lat, p.lon, hdg);
+    if (!replayActive) drawStreamers(p.lat, p.lon, hdg); else streamerLayer.clearLayers();
     updateMini(p.lat, p.lon);
     lastCurLL = { lat: p.lat, lon: p.lon, hd: hdg };
     const sp = spInfo(p.lat, p.lon);
     const spTxt = (sp && sp.offM < 3000) ? ('Line ' + sp.line + ' · SP ~' + sp.sp) : '';
     const spd = liveSpeedKn(p);
-    marker.bindPopup(`<b>${VESSEL_ID}</b><br>${fmt(p.lat,5)}, ${fmt(p.lon,5)}<br>Speed ${fmt(spd,1)} kn · Heading ${fmt(p.hd,0)}°${spTxt ? '<br>' + spTxt : ''}<br>${new Date(p.t).toLocaleString('en-GB')}`);
+    if (marker) marker.bindPopup(`<b>${VESSEL_ID}</b><br>${fmt(p.lat,5)}, ${fmt(p.lon,5)}<br>Speed ${fmt(spd,1)} kn · Heading ${fmt(p.hd,0)}°${spTxt ? '<br>' + spTxt : ''}<br>${new Date(p.t).toLocaleString('en-GB')}`);
     $('sSP').innerHTML = spTxt ? (sp.line + ' · <b>SP ' + sp.sp + '</b>') : '–';
-    if (follow) map.panTo(ll);
+    if (follow && !replayActive) map.panTo(ll);
 
     $('sSpd').innerHTML = fmt(spd,1) + ' <span class="unit">knots</span>';
     $('sSpd').style.color = speedColor(spd);
@@ -1557,7 +1567,7 @@ ${coords}
     const pts = replayRange(); if (!pts) { stopReplay(); return; }
     const dt = lastFrame ? (ts - lastFrame) : 0; lastFrame = ts;
     simT += dt * Number($('pbSpeed').value);
-    if (renderSim(pts)) { playing = false; lastFrame = 0; $('btnPlay').textContent = '▶ Play'; return; }
+    if (renderSim(pts)) { playing = false; lastFrame = 0; $('btnPlay').textContent = '▶ Play'; setLiveVisible(true); return; }
     rafId = requestAnimationFrame(step);
   }
   function stopReplay() {
@@ -1567,20 +1577,22 @@ ${coords}
     if (replayMarker) { map.removeLayer(replayMarker); replayMarker = null; }
     map.removeLayer(replayTrail); replayTrail.setLatLngs([]);
     $('pbClock').textContent = '–'; $('pbSlider').value = 0;
+    setLiveVisible(true);   // คืนเรือ live
   }
   $('btnPlay').onclick = () => {
-    if (playing) { playing = false; lastFrame = 0; $('btnPlay').textContent = '▶ Play'; return; }
+    if (playing) { playing = false; lastFrame = 0; $('btnPlay').textContent = '▶ Play'; setLiveVisible(true); return; }
     const pts = replayRange();
     if (!pts) { $('pbClock').textContent = 'no data'; return; }
     if (simT < pts[0].t || simT >= pts[pts.length-1].t) simT = pts[0].t;
     playing = true; lastFrame = 0;
     follow = false;
+    setLiveVisible(false);  // replay: ซ่อนเรือ live + streamer, ห้าม pan
     $('btnPlay').textContent = '⏸ Pause';
     rafId = requestAnimationFrame(step);
   };
   $('pbSlider').oninput = () => {
     const pts = replayRange(); if (!pts) return;
-    playing = false; lastFrame = 0; $('btnPlay').textContent = '▶ Play';
+    playing = false; lastFrame = 0; $('btnPlay').textContent = '▶ Play'; setLiveVisible(true);
     const t0 = pts[0].t, t1 = pts[pts.length-1].t;
     simT = t0 + (t1 - t0) * Number($('pbSlider').value) / 1000;
     renderSim(pts);
